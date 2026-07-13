@@ -1057,28 +1057,39 @@ let mouseLookLocked=false;
 function lockMouseLook(){
   if(!pointerLockSupported||!controls.enabled) return;
   renderer.domElement.requestPointerLock();
+  document.body.style.cursor='none';
 }
 function unlockMouseLook(){
   if(document.pointerLockElement===renderer.domElement) document.exitPointerLock();
+  document.body.style.cursor='auto';
 }
 
+// Keyboard input handling
 addEventListener('keydown',e=>{
-  if(controls.enabled&&(e.code==='KeyW'||e.code==='KeyA'||e.code==='KeyS'||e.code==='KeyD'||e.code==='ArrowUp'||e.code==='ArrowDown'||e.code==='ArrowLeft'||e.code==='ArrowRight'||e.code==='Space'))
+  if(controls.enabled&&(e.code==='KeyW'||e.code==='KeyA'||e.code==='KeyS'||e.code==='KeyD'||e.code==='ArrowUp'||e.code==='ArrowDown'||e.code==='ArrowLeft'||e.code==='ArrowRight'))
     e.preventDefault();
   keys[e.code]=true;
   if(e.code==='KeyE'&&controls.enabled) tryInteract();
+  if(e.code==='Escape') unlockMouseLook();
 });
 addEventListener('keyup',e=>keys[e.code]=false);
 
+// Pointer lock lifecycle
 if(pointerLockSupported){
   document.addEventListener('pointerlockchange',()=>{
     mouseLookLocked=document.pointerLockElement===renderer.domElement;
-    if(mouseLookLocked) dragging=false;
+    if(!mouseLookLocked) document.body.style.cursor='auto';
   });
-  document.addEventListener('pointerlockerror',()=>{ mouseLookLocked=false; });
+  document.addEventListener('pointerlockerror',()=>{ 
+    mouseLookLocked=false;
+    document.body.style.cursor='auto';
+  });
 }
 
 let dragging=false,lx=0,ly=0,downT=0,downX=0,downY=0;
+let joystickActive=false,joystickX=0,joystickY=0;
+
+// Desktop mouse pointer lock: click to lock, then move + WASD both work
 renderer.domElement.addEventListener('pointerdown',e=>{
   if(!controls.enabled) return;
 
@@ -1087,30 +1098,43 @@ renderer.domElement.addEventListener('pointerdown',e=>{
       lockMouseLook();
       return;
     }
-    tryInteract();
+    // While locked, pointer down doesn't do anything - let E key handle interact
     return;
   }
 
-  dragging=true; lx=e.clientX; ly=e.clientY; downT=performance.now(); downX=e.clientX; downY=e.clientY;
+  // Touch or pen - use swipe for look or joystick for movement
+  if(e.pointerType==='touch'){
+    dragging=true; lx=e.clientX; ly=e.clientY; downT=performance.now(); downX=e.clientX; downY=e.clientY;
+  }
 });
+
 addEventListener('pointermove',e=>{
   if(!controls.enabled) return;
-  if(mouseLookLocked){
+  
+  if(mouseLookLocked&&e.pointerType==='mouse'){
+    // Mouse look via pointer lock - works with WASD movement simultaneously
     yaw-=e.movementX*.0026; pitch-=e.movementY*.0026;
     pitch=Math.max(-1.2,Math.min(1.2,pitch));
     return;
   }
-  if(!dragging) return;
+  
+  if(!dragging||e.pointerType!=='touch') return;
+  
+  // Touch swipe for camera look (when not using joystick)
   yaw-=(e.clientX-lx)*.0032; pitch-=(e.clientY-ly)*.0032;
   pitch=Math.max(-1.2,Math.min(1.2,pitch));
   lx=e.clientX; ly=e.clientY;
 });
+
 addEventListener('pointerup',e=>{
-  if(mouseLookLocked) return;
-  if(!dragging) return; dragging=false;
+  if(e.pointerType!=='touch') return;
+  if(!dragging) return; 
+  dragging=false;
+  
   const moved=Math.hypot(e.clientX-downX,e.clientY-downY);
-  if(controls.enabled&&moved<6&&performance.now()-downT<400) tryInteract();
+  if(controls.enabled&&moved<8&&performance.now()-downT<300) tryInteract();
 });
+
 const ray=new THREE.Raycaster();
 let hoverObj=null;
 function castCenter(){
@@ -1119,15 +1143,54 @@ function castCenter(){
   return (hits.length&&hits[0].distance<3.4)?hits[0].object:null;
 }
 function tryInteract(){ const o=castCenter(); if(o) o.userData.action(); }
+
+// Mobile: Virtual joystick for movement (faint, fits UI scheme)
 if(isTouchDevice){
-  const pad=document.createElement('div');
-  pad.style.cssText='position:absolute;left:22px;bottom:120px;pointer-events:auto;display:flex;gap:10px';
-  pad.innerHTML='<button id="mvF" style="width:64px;height:64px;background:rgba(10,9,8,.7);border:1px solid var(--line);color:var(--gold);font-size:22px">▲</button><button id="mvB" style="width:64px;height:64px;background:rgba(10,9,8,.7);border:1px solid var(--line);color:var(--gold);font-size:22px">▼</button>';
-  document.getElementById('hud').appendChild(pad);
-  const bind=(id,code)=>{const b=document.getElementById(id);
-    b.addEventListener('touchstart',e=>{e.preventDefault();keys[code]=true});
-    b.addEventListener('touchend',()=>keys[code]=false);};
-  bind('mvF','KeyW'); bind('mvB','KeyS');
+  const joystickHTML=`
+    <div id="joystick-container" style="position:absolute;bottom:80px;left:50%;transform:translateX(-50%);pointer-events:auto;width:160px;height:160px;">
+      <div style="position:relative;width:100%;height:100%;border:1px solid rgba(218,165,32,.2);border-radius:50%;background:rgba(10,9,8,.15);box-shadow:inset 0 0 20px rgba(0,0,0,.4)">
+        <div id="joystick-thumb" style="position:absolute;width:60px;height:60px;background:rgba(218,165,32,.25);border:1px solid rgba(218,165,32,.4);border-radius:50%;left:50px;top:50px;transform:translate(-50%,-50%);box-shadow:0 0 10px rgba(218,165,32,.2);transition:all 0.05s linear"></div>
+      </div>
+    </div>
+  `;
+  const hudDiv=$('#hud');
+  const tempDiv=document.createElement('div');
+  tempDiv.innerHTML=joystickHTML;
+  hudDiv.appendChild(tempDiv.firstElementChild);
+  
+  const joystickContainer=$('#joystick-container');
+  const joystickThumb=$('#joystick-thumb');
+  let joystickPointerId=null;
+  
+  joystickContainer.addEventListener('pointerdown',e=>{
+    if(!controls.enabled) return;
+    joystickPointerId=e.pointerId;
+    joystickActive=true;
+  });
+  
+  document.addEventListener('pointermove',e=>{
+    if(!joystickActive||e.pointerId!==joystickPointerId) return;
+    
+    const rect=joystickContainer.getBoundingClientRect();
+    const cx=rect.left+rect.width/2, cy=rect.top+rect.height/2;
+    const dx=e.clientX-cx, dy=e.clientY-cy;
+    const dist=Math.hypot(dx,dy);
+    const maxDist=70;
+    
+    joystickX=Math.min(1,dist/maxDist)*(dx/dist||0);
+    joystickY=Math.min(1,dist/maxDist)*(dy/dist||0);
+    
+    const tx=joystickX*70, ty=joystickY*70;
+    joystickThumb.style.transform=`translate(calc(-50% + ${tx}px), calc(-50% + ${ty}px))`;
+  });
+  
+  document.addEventListener('pointerup',e=>{
+    if(e.pointerId!==joystickPointerId) return;
+    joystickActive=false;
+    joystickX=0;
+    joystickY=0;
+    joystickThumb.style.transform='translate(-50%,-50%)';
+  });
 }
 function moveStep(dt){
   if(!controls.enabled) return;
@@ -1135,10 +1198,19 @@ function moveStep(dt){
   const f=new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));
   const r=new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
   const v=new THREE.Vector3();
+  
+  // Keyboard input
   if(keys.KeyW||keys.ArrowUp) v.add(f);
   if(keys.KeyS||keys.ArrowDown) v.sub(f);
   if(keys.KeyD||keys.ArrowRight) v.add(r);
   if(keys.KeyA||keys.ArrowLeft) v.sub(r);
+  
+  // Mobile joystick input
+  if(joystickActive&&(Math.abs(joystickX)>0.1||Math.abs(joystickY)>0.1)){
+    v.add(f.clone().multiplyScalar(-joystickY));
+    v.add(r.clone().multiplyScalar(joystickX));
+  }
+  
   if(v.lengthSq()>0){
     v.normalize().multiplyScalar(sp);
     camera.position.add(v);
@@ -1247,9 +1319,9 @@ $('#enterBtn').addEventListener('click',async ()=>{
   loadLevel(state.level||0);
   queuePlayerEvent('session_start',{ levelIndex: state.level||0 });
   if(isTouchDevice)
-    setTimeout(()=>toast('FINGER LOOK: <span class="gold">SWIPE</span> TO LOOK · TAP TO INTERACT',3000),1200);
+    setTimeout(()=>toast('FINGER LOOK: <span class="gold">SWIPE</span> TO LOOK · <span class="gold">TAP</span> TO INTERACT · <span class="gold">JOYSTICK</span> TO MOVE',3000),1200);
   else if(pointerLockSupported)
-    setTimeout(()=>toast('MOUSE LOOK: CLICK TO LOCK · <span class="gold">ESC</span> TO UNLOCK',3000),1200);
+    setTimeout(()=>toast('MOUSE LOOK: <span class="gold">CLICK</span> TO LOCK · <span class="gold">E</span> TO INTERACT · <span class="gold">WASD</span> TO MOVE · <span class="gold">ESC</span> TO UNLOCK',3000),1200);
   setTimeout(()=>toast('SIX LEVELS BETWEEN YOU AND THE WAREHOUSE — <span class="gold">FIND THE DRAWING BOARD</span>',4600),2800);
   persistProgress();
 });
