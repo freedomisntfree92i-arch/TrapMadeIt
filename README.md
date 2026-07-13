@@ -143,3 +143,21 @@ Run end-to-end backend verification (starts mock API, executes route checks, the
 ```bash
 npm run test:api
 ```
+
+## iOS App Pipeline (TestFlight)
+
+This repository now includes Capacitor scaffolding to package the app for iPhone distribution via TestFlight.
+
+- Config file: `capacitor.config.ts`
+- iOS env template: `.env.ios.example`
+- Release guide: `docs/IOS-TESTFLIGHT-RELEASE.md`
+
+Common commands:
+
+```bash
+npm run ios:prepare
+npm run ios:sync
+npm run ios:open
+```
+
+Note: final iOS archive/signing/upload requires macOS + Xcode and Apple Developer credentials.
