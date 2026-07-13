@@ -166,3 +166,26 @@ Team release automation:
 
 - GitHub Actions workflow: `.github/workflows/ios-testflight.yml`
 - Full setup and secrets checklist: `docs/IOS-TESTFLIGHT-RELEASE.md`
+
+## Android App Pipeline (Google Play + Direct APK)
+
+This repository now includes Capacitor scaffolding to package the app for Android distribution via APK or Google Play Store.
+
+- Config file: `capacitor.config.ts`
+- Android env template: `.env.android.example`
+- Release guide: `docs/ANDROID-RELEASE.md`
+
+Common commands:
+
+```bash
+npm run android:prepare
+npm run android:sync
+npm run android:open
+```
+
+Team release automation:
+
+- GitHub Actions workflow: `.github/workflows/android-release.yml`
+- Full setup and secrets checklist: `docs/ANDROID-RELEASE.md`
+
+Note: final Android APK signing requires keystore credentials and Google Play distribution requires a developer account (one-time 25 USD).
