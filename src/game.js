@@ -30,6 +30,34 @@ window.addEventListener('error',function(){
   if(!ok) throw new Error('WebGL unavailable in this viewer');
 })();
 
+// ==================== PLATFORM DETECTION ====================
+const platform={
+  isTouchDevice: ('ontouchstart' in window)||navigator.maxTouchPoints>0,
+  isNativeApp: typeof window.Capacitor!=='undefined',
+  isAndroid: /android/i.test(navigator.userAgent),
+  isIOS: /iphone|ipad|ipod/i.test(navigator.userAgent),
+  isDesktop: !/android|iphone|ipad|ipod/i.test(navigator.userAgent),
+  get name(){
+    if(this.isNativeApp) return this.isAndroid?'android':this.isIOS?'ios':'native';
+    return this.isDesktop?'desktop':this.isTouchDevice?'mobile':'web';
+  },
+  hint:{
+    interact: function(){ 
+      return platform.isDesktop?'<span class="gold">E</span> to interact':'<span class="gold">TAP</span> to interact';
+    },
+    move: function(){
+      return platform.isDesktop?'<span class="gold">WASD</span> to move':'<span class="gold">JOYSTICK</span> to move';
+    },
+    look: function(){
+      return platform.isDesktop?'<span class="gold">MOUSE</span> to look':'<span class="gold">SWIPE</span> to look';
+    },
+    lockHint: function(){
+      if(platform.isDesktop) return 'MOUSE LOOK: <span class="gold">CLICK</span> to lock · '+platform.hint.move()+' · '+platform.hint.interact()+' · <span class="gold">ESC</span> to unlock';
+      return 'TOUCH CONTROLS: '+platform.hint.look()+' · '+platform.hint.move()+' · '+platform.hint.interact();
+    }
+  }
+};
+
 /* ============================================================
    TRAP MADE IT — THE COME UP · 6-LEVEL WORLD
    L1 The Come Up  · L2 The Cook Up · L3 The Graveyard Shift
@@ -1050,7 +1078,6 @@ function nextLevel(){
 // ==================== CONTROLS ====================
 const controls={enabled:false};
 const keys={};
-const isTouchDevice=('ontouchstart' in window)||navigator.maxTouchPoints>0;
 const pointerLockSupported=typeof renderer.domElement.requestPointerLock==='function';
 let mouseLookLocked=false;
 
@@ -1145,7 +1172,7 @@ function castCenter(){
 function tryInteract(){ const o=castCenter(); if(o) o.userData.action(); }
 
 // Mobile: Virtual joystick for movement (faint, fits UI scheme)
-if(isTouchDevice){
+if(platform.isTouchDevice){
   const joystickHTML=`
     <div id="joystick-container" style="position:absolute;bottom:80px;left:50%;transform:translateX(-50%);pointer-events:auto;width:160px;height:160px;">
       <div style="position:relative;width:100%;height:100%;border:1px solid rgba(218,165,32,.2);border-radius:50%;background:rgba(10,9,8,.15);box-shadow:inset 0 0 20px rgba(0,0,0,.4)">
@@ -1319,9 +1346,7 @@ $('#enterBtn').addEventListener('click',async ()=>{
   loadLevel(state.level||0);
   queuePlayerEvent('session_start',{ levelIndex: state.level||0 });
   if(isTouchDevice)
-    setTimeout(()=>toast('FINGER LOOK: <span class="gold">SWIPE</span> TO LOOK · <span class="gold">TAP</span> TO INTERACT · <span class="gold">JOYSTICK</span> TO MOVE',3000),1200);
-  else if(pointerLockSupported)
-    setTimeout(()=>toast('MOUSE LOOK: <span class="gold">CLICK</span> TO LOCK · <span class="gold">E</span> TO INTERACT · <span class="gold">WASD</span> TO MOVE · <span class="gold">ESC</span> TO UNLOCK',3000),1200);
+    setTimeout(()=>toast(platform.hint.lockHint(),3000),1200);
   setTimeout(()=>toast('SIX LEVELS BETWEEN YOU AND THE WAREHOUSE — <span class="gold">FIND THE DRAWING BOARD</span>',4600),2800);
   persistProgress();
 });
@@ -1359,7 +1384,7 @@ function loop(now){
       hoverObj=o;
       $('#crosshair').classList.toggle('hot',!!o);
       $('#hoverTag').classList.toggle('on',!!o);
-      if(o) $('#hoverTag').textContent=o.userData.name;
+      if(o) $('#hoverTag').innerHTML=`${o.userData.name}<br><span style="font-size:0.8em;opacity:0.8">${platform.hint.interact()}</span>`;
     }
   }
   renderer.render(scene,camera);
