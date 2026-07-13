@@ -17,10 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       NODE_VERSION: "20"
-      JAVA_VERSION: "11"
       VITE_API_ORIGIN: ${{ secrets.VITE_API_ORIGIN }}
-      VERSION_NAME: ${{ github.event.inputs.version_name }}
-      VERSION_CODE: ${{ github.event.inputs.version_code }}
 
     steps:
       - name: Checkout
@@ -36,56 +33,62 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: "temurin"
-          java-version: ${{ env.JAVA_VERSION }}
+          java-version: "11"
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Fail if required secrets are missing
+      - name: Validate secrets
         run: |
-          [[ -n "${VITE_API_ORIGIN}" ]] || (echo "Missing secret VITE_API_ORIGIN" && exit 1)
-          [[ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]] || (echo "Missing secret ANDROID_KEYSTORE_BASE64" && exit 1)
-          [[ -n "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" ]] || (echo "Missing secret ANDROID_KEYSTORE_PASSWORD" && exit 1)
-          [[ -n "${{ secrets.ANDROID_KEY_ALIAS }}" ]] || (echo "Missing secret ANDROID_KEY_ALIAS" && exit 1)
-          [[ -n "${{ secrets.ANDROID_KEY_PASSWORD }}" ]] || (echo "Missing secret ANDROID_KEY_PASSWORD" && exit 1)
+          [[ -n "${VITE_API_ORIGIN}" ]] || (echo "Missing VITE_API_ORIGIN" && exit 1)
+          [[ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]] || (echo "Missing ANDROID_KEYSTORE_BASE64" && exit 1)
+          [[ -n "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" ]] || (echo "Missing ANDROID_KEYSTORE_PASSWORD" && exit 1)
+          [[ -n "${{ secrets.ANDROID_KEY_ALIAS }}" ]] || (echo "Missing ANDROID_KEY_ALIAS" && exit 1)
+          [[ -n "${{ secrets.ANDROID_KEY_PASSWORD }}" ]] || (echo "Missing ANDROID_KEY_PASSWORD" && exit 1)
+
+      - name: Install npm dependencies
+        run: npm ci
 
       - name: Build web assets
         run: npm run build
 
-      - name: Generate Android project if needed
+      - name: Generate Android project
         run: |
-          if [[ ! -d android/app ]]; then
+          if [[ ! -d android ]]; then
             npx cap add android
           fi
-          npx cap sync android
 
-      - name: Decode and write keystore
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Decode keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
-          echo -n "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/trapmadeit-release.jks"
-          echo "KEYSTORE_PATH=$RUNNER_TEMP/trapmadeit-release.jks" >> $GITHUB_ENV
+          mkdir -p $GITHUB_WORKSPACE/keystore
+          echo -n "$KEYSTORE_BASE64" | base64 -d > $GITHUB_WORKSPACE/keystore/release.jks
 
-      - name: Update version in build.gradle
+      - name: Update version
         run: |
-          sed -i "s/versionCode [0-9]*/versionCode $VERSION_CODE/" android/app/build.gradle
-          sed -i "s/versionName \"[^\"]*\"/versionName \"$VERSION_NAME\"/" android/app/build.gradle
+          if [[ -f android/app/build.gradle ]]; then
+            sed -i 's/versionCode [0-9]*/versionCode ${{ github.event.inputs.version_code }}/' android/app/build.gradle
+            sed -i 's/versionName "[^"]*"/versionName "${{ github.event.inputs.version_name }}"/' android/app/build.gradle
+          fi
 
       - name: Build release APK
         env:
+          KEYSTORE_PATH: ${{ github.workspace }}/keystore/release.jks
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           cd android
+          chmod +x gradlew
           ./gradlew assembleRelease \
             -Pandroid.injected.signing.store.file="$KEYSTORE_PATH" \
             -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
             -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
-            -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
-          cd ..
+            -Pandroid.injected.signing.key.password="$KEY_PASSWORD" \
+            -Pandroid.useAndroidX=true
 
-      - name: Upload APK as artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: app-release-apk
@@ -94,9 +97,8 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: android-v${{ env.VERSION_NAME }}
+          tag_name: android-v${{ github.event.inputs.version_name }}
           files: android/app/release/app-release.apk
           body: |
-            Android Release v${{ env.VERSION_NAME }} (build ${{ env.VERSION_CODE }})
-            
-            Download the APK from this release to share with your team.
+            Android Release v${{ github.event.inputs.version_name }}
+            Build: ${{ github.event.inputs.version_code }}
