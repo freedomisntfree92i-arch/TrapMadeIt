@@ -161,3 +161,8 @@ npm run ios:open
 ```
 
 Note: final iOS archive/signing/upload requires macOS + Xcode and Apple Developer credentials.
+
+Team release automation:
+
+- GitHub Actions workflow: `.github/workflows/ios-testflight.yml`
+- Full setup and secrets checklist: `docs/IOS-TESTFLIGHT-RELEASE.md`

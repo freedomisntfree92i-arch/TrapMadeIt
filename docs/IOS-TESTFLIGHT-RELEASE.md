@@ -95,3 +95,42 @@ Use a macOS CI job that performs:
 4. Xcode archive + TestFlight upload using App Store Connect API key
 
 This gives repeatable, one-command releases once signing is configured.
+
+## 9) GitHub Actions Pipeline (included)
+
+This repo includes an on-demand workflow at `.github/workflows/ios-testflight.yml`.
+
+Trigger path:
+
+1. GitHub -> Actions -> `iOS TestFlight Release`.
+2. Click `Run workflow`.
+3. Enter:
+  - `app_version` (for example `1.0.1`)
+  - `build_number` (for example `101`)
+
+Required repository secrets:
+
+- `VITE_API_ORIGIN`: Hosted HTTPS API origin (without `/api`).
+- `IOS_BUNDLE_ID`: App bundle ID in App Store Connect.
+- `APPLE_TEAM_ID`: Apple Developer Team ID.
+- `APPLE_CODE_SIGNING_CERT_BASE64`: Base64-encoded `.p12` signing cert.
+- `APPLE_CODE_SIGNING_CERT_PASSWORD`: Password used when exporting the `.p12` file.
+- `APPLE_PROVISION_PROFILE_BASE64`: Base64-encoded App Store provisioning profile.
+- `APPLE_KEYCHAIN_PASSWORD`: Temporary keychain password used during CI signing.
+- `APP_STORE_CONNECT_KEY_ID`: App Store Connect API key ID.
+- `APP_STORE_CONNECT_ISSUER_ID`: App Store Connect API issuer ID.
+- `APP_STORE_CONNECT_API_KEY_BASE64`: Base64-encoded App Store Connect `.p8` key.
+
+Base64 examples:
+
+```bash
+base64 -i ios_distribution.p12 | pbcopy
+base64 -i AppStore.mobileprovision | pbcopy
+base64 -i AuthKey_XXXXXX.p8 | pbcopy
+```
+
+After successful upload:
+
+1. Open App Store Connect -> TestFlight.
+2. Wait for build processing.
+3. Add internal testers (team/stakeholders) for immediate install.

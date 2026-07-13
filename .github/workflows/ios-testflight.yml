@@ -1,0 +1,148 @@
+name: iOS TestFlight Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_version:
+        description: "Marketing version (for example 1.0.1)"
+        required: true
+        default: "1.0.0"
+      build_number:
+        description: "CFBundleVersion (for example 101)"
+        required: true
+        default: "1"
+
+jobs:
+  build-and-upload:
+    runs-on: macos-14
+    env:
+      NODE_VERSION: "20"
+      VITE_API_ORIGIN: ${{ secrets.VITE_API_ORIGIN }}
+      APP_VERSION: ${{ github.event.inputs.app_version }}
+      BUILD_NUMBER: ${{ github.event.inputs.build_number }}
+      BUNDLE_ID: ${{ secrets.IOS_BUNDLE_ID }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Fail if required secrets are missing
+        run: |
+          [[ -n "${VITE_API_ORIGIN}" ]] || (echo "Missing secret VITE_API_ORIGIN" && exit 1)
+          [[ -n "${BUNDLE_ID}" ]] || (echo "Missing secret IOS_BUNDLE_ID" && exit 1)
+          [[ -n "${{ secrets.APPLE_TEAM_ID }}" ]] || (echo "Missing secret APPLE_TEAM_ID" && exit 1)
+          [[ -n "${{ secrets.APPLE_CODE_SIGNING_CERT_BASE64 }}" ]] || (echo "Missing secret APPLE_CODE_SIGNING_CERT_BASE64" && exit 1)
+          [[ -n "${{ secrets.APPLE_CODE_SIGNING_CERT_PASSWORD }}" ]] || (echo "Missing secret APPLE_CODE_SIGNING_CERT_PASSWORD" && exit 1)
+          [[ -n "${{ secrets.APPLE_PROVISION_PROFILE_BASE64 }}" ]] || (echo "Missing secret APPLE_PROVISION_PROFILE_BASE64" && exit 1)
+          [[ -n "${{ secrets.APP_STORE_CONNECT_KEY_ID }}" ]] || (echo "Missing secret APP_STORE_CONNECT_KEY_ID" && exit 1)
+          [[ -n "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}" ]] || (echo "Missing secret APP_STORE_CONNECT_ISSUER_ID" && exit 1)
+          [[ -n "${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}" ]] || (echo "Missing secret APP_STORE_CONNECT_API_KEY_BASE64" && exit 1)
+
+      - name: Build web assets
+        run: npm run build
+
+      - name: Generate iOS project if needed
+        run: |
+          if [[ ! -d ios/App ]]; then
+            npx cap add ios
+          fi
+          npx cap sync ios
+
+      - name: Install iOS signing certificate and provisioning profile
+        env:
+          CERT_BASE64: ${{ secrets.APPLE_CODE_SIGNING_CERT_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.APPLE_CODE_SIGNING_CERT_PASSWORD }}
+          PROFILE_BASE64: ${{ secrets.APPLE_PROVISION_PROFILE_BASE64 }}
+          KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
+        run: |
+          CERT_PATH="$RUNNER_TEMP/dist_cert.p12"
+          PROFILE_PATH="$RUNNER_TEMP/profile.mobileprovision"
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+
+          echo -n "$CERT_BASE64" | base64 -D > "$CERT_PATH"
+          echo -n "$PROFILE_BASE64" | base64 -D > "$PROFILE_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles"
+
+      - name: Apply iOS version/build numbers
+        run: |
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $APP_VERSION" ios/App/App/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" ios/App/App/Info.plist
+
+      - name: Archive app
+        env:
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          xcodebuild \
+            -workspace ios/App/App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -archivePath "$RUNNER_TEMP/TrapMadeIt.xcarchive" \
+            -destination "generic/platform=iOS" \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
+            -allowProvisioningUpdates \
+            clean archive
+
+      - name: Create export options plist
+        run: |
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store</string>
+            <key>signingStyle</key>
+            <string>automatic</string>
+            <key>stripSwiftSymbols</key>
+            <true/>
+            <key>compileBitcode</key>
+            <false/>
+            <key>destination</key>
+            <string>export</string>
+          </dict>
+          </plist>
+          PLIST
+
+      - name: Export IPA
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/TrapMadeIt.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/output"
+
+      - name: Write App Store Connect API key
+        env:
+          APP_STORE_CONNECT_API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+        run: |
+          mkdir -p "$HOME/private_keys"
+          echo -n "$APP_STORE_CONNECT_API_KEY_BASE64" | base64 -D > "$HOME/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
+
+      - name: Upload IPA to TestFlight
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          xcrun iTMSTransporter \
+            -m upload \
+            -assetFile "$RUNNER_TEMP/output/App.ipa" \
+            -apiKey "$APP_STORE_CONNECT_KEY_ID" \
+            -apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
