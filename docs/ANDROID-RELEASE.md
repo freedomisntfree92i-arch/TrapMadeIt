@@ -2,7 +2,7 @@
 
 This guide documents the full path from this repo to a distributable Android APK and play store release.
 
-## 1) Prerequisites
+## 1) Prerequisit
 
 - Android SDK + build tools installed locally or via Android Studio.
 - Java Development Kit (JDK) 11+ (Android Gradle requires this).
