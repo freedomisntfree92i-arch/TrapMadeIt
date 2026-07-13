@@ -2,6 +2,16 @@
 
 This repository now contains a modular, buildable version of the prototype plus a non-breaking Phase 2 admin/data scaffold.
 
+## Copyright and Proprietary Notice
+
+Copyright (c) 2026 TrapMadeIt and KimaniTheBarber. All rights reserved.
+
+This codebase, game concept, brand elements, assets, content model, and related implementation details are proprietary and confidential intellectual property of TrapMadeIt and KimaniTheBarber.
+
+No part of this repository may be copied, reproduced, distributed, modified, reverse engineered, sublicensed, or used to create derivative works without prior written permission from TrapMadeIt and KimaniTheBarber.
+
+Access to this repository does not grant any license to use associated trademarks, branding, media assets, or commercial gameplay/content systems except where explicitly authorized in writing.
+
 ## What Phase 1 delivered
 
 - Migrated from a single monolithic HTML runtime to a proper app structure.
