@@ -1,0 +1,21 @@
+{
+  "name": "trap-made-it-phase1",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:api": "node server/mockApiServer.js",
+    "dev:full": "node server/dev-full.js",
+    "test:api": "node scripts/smoke-api.mjs",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "three": "^0.166.1"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0"
+  }
+}
