@@ -1,11 +1,45 @@
+export function createRoomAssetTemplate(overrides={}){
+  return {
+    enabled:false,
+    modelUrl:null,
+    environmentUrl:null,
+    useEnvironmentAsBackground:false,
+    hideProcedural:false,
+    transform:null,
+    sceneConfig:null,
+    materialTuning:null,
+    ...overrides,
+  };
+}
+
 export const ROOM_ASSET_REGISTRY={
-  0:{ key:"lvl-01", label:"The Come Up", modelUrl:null, environmentUrl:null, hideProcedural:false, sceneConfig:null, materialTuning:null },
-  1:{ key:"lvl-02", label:"The Cook Up", modelUrl:null, environmentUrl:null, hideProcedural:false, sceneConfig:null, materialTuning:null },
-  2:{ key:"lvl-03", label:"The Graveyard Shift", modelUrl:null, environmentUrl:null, hideProcedural:false, sceneConfig:null, materialTuning:null },
-  3:{ key:"lvl-04", label:"The Front", modelUrl:null, environmentUrl:null, hideProcedural:false, sceneConfig:null, materialTuning:null },
-  4:{ key:"lvl-05", label:"Top Floor", modelUrl:null, environmentUrl:null, hideProcedural:false, sceneConfig:null, materialTuning:null },
-  5:{ key:"lvl-06", label:"The Warehouse", modelUrl:null, environmentUrl:null, hideProcedural:false, sceneConfig:null, materialTuning:null },
+  0:createRoomAssetTemplate({ key:"lvl-01", label:"The Come Up" }),
+  1:createRoomAssetTemplate({ key:"lvl-02", label:"The Cook Up" }),
+  2:createRoomAssetTemplate({ key:"lvl-03", label:"The Graveyard Shift" }),
+  3:createRoomAssetTemplate({ key:"lvl-04", label:"The Front" }),
+  4:createRoomAssetTemplate({ key:"lvl-05", label:"Top Floor" }),
+  5:createRoomAssetTemplate({ key:"lvl-06", label:"The Warehouse" }),
 };
+
+export const FIRST_ROOM_MIGRATION_EXAMPLE=createRoomAssetTemplate({
+  enabled:false,
+  key:"lvl-01",
+  label:"The Come Up",
+  modelUrl:"/src/assets/models/lvl-01-room.glb",
+  environmentUrl:"/src/assets/hdr/night-alley.hdr",
+  useEnvironmentAsBackground:false,
+  hideProcedural:true,
+  transform:{ position:[0,0,0], rotation:[0,0,0], scale:1 },
+  materialTuning:{ envMapIntensity:1.2, roughness:0.65, metalness:0.05, normalScale:1.0, flatShading:false },
+  sceneConfig:{
+    fog:[0x0a0805,0.038],
+    background:0x050403,
+    spawn:[0,1.6,4.2],
+    yaw:0,
+    pitch:0,
+    bounds:{ insetX:0.5, insetZ:0.5 },
+  },
+});
 
 function applyTransform(target, transform={}){
   const { position, rotation, scale }=transform;
@@ -43,7 +77,8 @@ export async function applyRoomAssetLayer({
   shouldApply,
 }){
   const entry=ROOM_ASSET_REGISTRY[levelIndex];
-  if(!entry||(!entry.modelUrl&&!entry.environmentUrl)) return { applied:false, reason:"no-assets" };
+  if(!entry||entry.enabled!==true) return { applied:false, reason:"disabled" };
+  if(!entry.modelUrl&&!entry.environmentUrl) return { applied:false, reason:"no-assets" };
   if(shouldApply&&!shouldApply()) return { applied:false, reason:"stale-request" };
 
   if(entry.environmentUrl){

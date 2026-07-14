@@ -38,6 +38,12 @@ All settings are wired globally in runtime and affect all rooms.
 3. Standardize each room to PBR materials and authored lighting.
 4. Use same quality tiers and post effects for all rooms.
 
+### Stage Gating Rule
+
+- A room asset entry only activates when `enabled: true`.
+- This allows shipping config progressively without risking half-wired room swaps.
+- Disabled entries continue to use procedural fallback.
+
 ## Runtime Behavior
 
 - `loadLevel()` now attempts to apply a room asset layer after building the procedural room.
@@ -64,6 +70,16 @@ Each room entry in `src/render/roomAssetRegistry.js` can now define:
   - `metalness`
   - `normalScale`
   - `flatShading`
+
+## First Room Template
+
+- `src/render/roomAssetRegistry.js` exports `FIRST_ROOM_MIGRATION_EXAMPLE`.
+- Copy this shape into level `0` (or any target level), set real asset paths, then switch `enabled: true`.
+- Recommended sequence:
+  1. Assign `modelUrl` only and verify geometry scale/transform.
+  2. Add `environmentUrl` and tune `materialTuning`.
+  3. Enable `hideProcedural` when authored room fully covers current scene.
+  4. Apply `sceneConfig` overrides for spawn/bounds/fog only after gameplay interaction checks.
 
 ## Performance Notes
 
