@@ -1,0 +1,36 @@
+name: Quality Gates
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  web-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate room migration registry
+        run: npm run validate:rooms
+
+      - name: Build web app
+        run: npm run build
+
+      - name: Run API smoke test
+        run: npm run test:api
+
+      - name: Export Unity handoff package
+        run: npm run export:unity

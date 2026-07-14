@@ -8,6 +8,8 @@
     "dev:api": "node server/mockApiServer.js",
     "dev:full": "node server/dev-full.js",
     "validate:rooms": "node scripts/validate-room-assets.mjs",
+    "export:unity": "node scripts/export-unity-handoff.mjs",
+    "handoff:unity": "npm run validate:rooms && npm run export:unity",
     "test:api": "node scripts/smoke-api.mjs",
     "build": "vite build",
     "preview": "vite preview",

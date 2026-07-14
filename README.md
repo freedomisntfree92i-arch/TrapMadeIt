@@ -65,6 +65,19 @@ npm run dev:api
 npm run build
 ```
 
+Quality and migration checks:
+
+```bash
+npm run validate:rooms
+npm run test:api
+```
+
+Unity handoff export:
+
+```bash
+npm run handoff:unity
+```
+
 4. Preview production build:
 
 ```bash
@@ -96,6 +109,7 @@ http://localhost:8787/api/health
 - Admin scaffold now syncs to local mock API with local fallback and supports JSON import/export for handoff/versioning.
 - Mock API data persists in SQLite at `server/storage/trapmadeit.db`.
 - Render pipeline baseline and asset migration plan are documented in `docs/RENDER-PIPELINE.md`.
+- Unity handoff packaging and import guidance are documented in `docs/UNITY-HANDOFF.md`.
 
 ## Mock API Scope
 
@@ -144,6 +158,15 @@ Run end-to-end backend verification (starts mock API, executes route checks, the
 ```bash
 npm run test:api
 ```
+
+## Quality Gates CI
+
+- Workflow: `.github/workflows/quality-gates.yml`
+- Runs on push/PR and executes:
+	- `npm run validate:rooms`
+	- `npm run build`
+	- `npm run test:api`
+	- `npm run export:unity`
 
 ## iOS App Pipeline (TestFlight)
 

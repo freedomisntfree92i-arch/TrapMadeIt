@@ -66,6 +66,16 @@ All settings are wired globally in runtime and affect all rooms.
   - exits non-zero when errors are found
   - keeps warnings non-blocking for disabled draft entries
 
+## Stage 9 Completion
+
+- Quality gates now run in CI via `.github/workflows/quality-gates.yml`.
+- The workflow checks registry validity, build health, API smoke, and Unity handoff export generation.
+
+## Unity Migration Export
+
+- Run `npm run handoff:unity` to generate Unity-ready handoff JSON files.
+- Output is written to `exports/unity-handoff/`.
+
 ## Room Asset Registry Fields
 
 Each room entry in `src/render/roomAssetRegistry.js` can now define:

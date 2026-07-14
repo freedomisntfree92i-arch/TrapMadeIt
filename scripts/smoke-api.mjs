@@ -18,6 +18,15 @@ async function req(path, options = {}) {
   return data;
 }
 
+async function healthCheck() {
+  try {
+    const res = await fetch(`${base}/api/health`);
+    return res.ok;
+  } catch (_err) {
+    return false;
+  }
+}
+
 async function run() {
   const runId = Date.now();
   const email = `admin+${runId}@trapmadeit.local`;
@@ -113,15 +122,20 @@ async function run() {
 }
 
 async function main() {
-  const server = spawn("node", ["server/mockApiServer.js"], {
-    stdio: "inherit",
-  });
+  const hasExternalServer = await healthCheck();
+  let server = null;
+
+  if (!hasExternalServer) {
+    server = spawn("node", ["server/mockApiServer.js"], {
+      stdio: "inherit",
+    });
+    await sleep(900);
+  }
 
   try {
-    await sleep(900);
     await run();
   } finally {
-    server.kill("SIGTERM");
+    if (server) server.kill("SIGTERM");
   }
 }
 
