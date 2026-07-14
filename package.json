@@ -7,6 +7,7 @@
     "dev": "vite",
     "dev:api": "node server/mockApiServer.js",
     "dev:full": "node server/dev-full.js",
+    "validate:rooms": "node scripts/validate-room-assets.mjs",
     "test:api": "node scripts/smoke-api.mjs",
     "build": "vite build",
     "preview": "vite preview",

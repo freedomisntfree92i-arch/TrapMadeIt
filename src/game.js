@@ -5,7 +5,8 @@ import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPa
 import { createAssetPipeline } from "./render/assetPipeline";
 import { detectRenderDeviceProfile } from "./render/deviceProfile";
 import { DEFAULT_VISUAL_SETTINGS, QUALITY_PROFILES, ROOM_LIGHT_PROFILES } from "./render/qualityProfiles";
-import { applyRoomAssetLayer } from "./render/roomAssetRegistry";
+import { applyRoomAssetLayer, ROOM_ASSET_REGISTRY } from "./render/roomAssetRegistry";
+import { formatRegistryValidationReport, validateRoomAssetRegistry } from "./render/roomAssetValidation";
 import { getContent, getContentRemoteFirst } from "./data/contentStore";
 import {
   createDefaultPlayerProfile,
@@ -446,6 +447,15 @@ let bloomPass;
 const assetPipeline=createAssetPipeline(renderer);
 window.__trapAssetPipeline=assetPipeline;
 window.__trapRenderDeviceProfile=deviceProfile;
+
+function runRoomAssetRegistryPreflight(){
+  const report=validateRoomAssetRegistry(ROOM_ASSET_REGISTRY);
+  if(report.warnings.length===0&&report.errors.length===0) return;
+  const lines=formatRegistryValidationReport(report);
+  const logger=report.errors.length?console.error:console.warn;
+  logger("[room-assets] preflight issues detected\n"+lines.join("\n"));
+}
+runRoomAssetRegistryPreflight();
 
 function loadVisualSettings(){
   try{

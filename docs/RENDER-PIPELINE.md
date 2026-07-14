@@ -24,6 +24,9 @@ All settings are wired globally in runtime and affect all rooms.
 - `src/render/roomAssetRegistry.js`
   - Per-room asset slots for GLB/HDR migration
   - Procedural fallback remains active when slots are empty
+- `src/render/roomAssetValidation.js`
+  - Registry schema validation for staged migration safety
+  - Shared formatter for runtime/CI-readable diagnostics
 
 ## Asset Structure
 
@@ -49,6 +52,19 @@ All settings are wired globally in runtime and affect all rooms.
 - `loadLevel()` now attempts to apply a room asset layer after building the procedural room.
 - If no room assets are assigned, current behavior is unchanged.
 - If a room GLB/HDR is assigned later, it plugs into the same runtime without changing gameplay flow.
+- Startup preflight logs room registry validation issues before room load attempts.
+
+## Preflight Utility
+
+- Run `npm run validate:rooms` to perform migration preflight checks.
+- The utility validates:
+  - required field types (`enabled`, booleans, vectors, scene config, material tuning)
+  - asset URL extension correctness (`.glb/.gltf`, `.hdr`)
+  - enabled-room asset presence requirements
+  - local file existence for `/src/...` model/HDR paths
+- CI behavior:
+  - exits non-zero when errors are found
+  - keeps warnings non-blocking for disabled draft entries
 
 ## Room Asset Registry Fields
 
