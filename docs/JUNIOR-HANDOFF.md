@@ -38,9 +38,7 @@
   - Audit: `GET /api/ops/audit`
 
 5. Auth/account scaffold is included.
-- Local default admin user:
-  - email: `admin@trapmadeit.local`
-  - password: `admin123`
+- Local admin users can be created through `POST /api/auth/register` with `role: "admin"`.
 - Session tokens and role checks are enforced for protected routes.
 
 6. Commerce lifecycle placeholder is complete for development.

@@ -28,6 +28,7 @@ const chapterEventsFile = "chapterEvents";
 const auditFile = "audit";
 const PORT = Number(process.env.MOCK_API_PORT || 8787);
 let store;
+const LEGACY_DEFAULT_ADMIN_EMAIL = "admin@trapmadeit.local";
 
 function createDefaultPlayerProfile(playerId) {
   const ts = new Date().toISOString();
@@ -130,24 +131,28 @@ async function ensureStorage() {
   store = createSqliteStore({ dbPath: dbFile });
   store.ensureKey(contentFile, defaultContent);
   store.ensureKey(playersFile, {});
-  store.ensureKey(
-    usersFile,
-    [
-      {
-        id: "u_admin",
-        email: "admin@trapmadeit.local",
-        passwordHash: hashPassword("admin123"),
-        role: "admin",
-        createdAt: nowIso(),
-      },
-    ],
-  );
+  store.ensureKey(usersFile, []);
   store.ensureKey(sessionsFile, {});
   store.ensureKey(inventoryFile, buildDefaultInventory(defaultContent));
   for (const file of [ordersFile, discountsFile, refundsFile, fulfillmentsFile, releasesFile, rewardClaimsFile, moderationFile, storiesFile, opportunitiesFile, chapterEventsFile]) {
     store.ensureKey(file, []);
   }
   store.ensureKey(auditFile, []);
+
+  // Safety valve for hosted deployments that may re-use an older local DB snapshot.
+  if (process.env.NODE_ENV === "production") {
+    const users = await readJson(usersFile, []);
+    const filteredUsers = users.filter((u) => u.email !== LEGACY_DEFAULT_ADMIN_EMAIL);
+    if (filteredUsers.length !== users.length) {
+      await writeJson(usersFile, filteredUsers);
+      const removedIds = new Set(users.filter((u) => u.email === LEGACY_DEFAULT_ADMIN_EMAIL).map((u) => u.id));
+      const sessions = await readJson(sessionsFile, {});
+      for (const [token, session] of Object.entries(sessions)) {
+        if (removedIds.has(session.userId)) delete sessions[token];
+      }
+      await writeJson(sessionsFile, sessions);
+    }
+  }
 }
 
 async function readJson(file, fallback) {

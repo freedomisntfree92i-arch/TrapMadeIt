@@ -19,8 +19,11 @@ async function req(path, options = {}) {
 }
 
 async function run() {
-  const email = `admin+${Date.now()}@trapmadeit.local`;
+  const runId = Date.now();
+  const email = `admin+${runId}@trapmadeit.local`;
   const password = "admin123";
+  const playerId = `smoke-player-${runId}`;
+  const discountCode = `SMOKE${String(runId).slice(-6)}`;
 
   await req("/api/health");
   await req("/api/auth/register", {
@@ -53,19 +56,19 @@ async function run() {
   await req("/api/commerce/discounts", {
     method: "POST",
     headers: auth,
-    body: JSON.stringify({ code: "SMOKE10", type: "percent", value: 10, active: true }),
+    body: JSON.stringify({ code: discountCode, type: "percent", value: 10, active: true }),
   });
 
   await req("/api/commerce/checkout", {
     method: "POST",
     body: JSON.stringify({
-      playerId: "smoke-player",
+      playerId,
       items: [{ dropId: firstDrop.id, qty: 1 }],
-      discountCode: "SMOKE10",
+      discountCode,
     }),
   });
 
-  const orders = await req("/api/commerce/orders?playerId=smoke-player");
+  const orders = await req(`/api/commerce/orders?playerId=${encodeURIComponent(playerId)}`);
   if (!orders.orders.length) throw new Error("Expected at least one order");
   const orderId = orders.orders[orders.orders.length - 1].id;
 
@@ -83,12 +86,12 @@ async function run() {
 
   await req("/api/rewards/claim", {
     method: "POST",
-    body: JSON.stringify({ playerId: "smoke-player", levelId: "lvl-01", missionId: "walk", rewardCoins: 100 }),
+    body: JSON.stringify({ playerId, levelId: "lvl-01", missionId: `walk-${runId}`, rewardCoins: 100 }),
   });
 
   await req("/api/community/stories", {
     method: "POST",
-    body: JSON.stringify({ playerId: "smoke-player", title: "From trapped to focused", body: "Testing story" }),
+    body: JSON.stringify({ playerId, title: "From trapped to focused", body: "Testing story" }),
   });
 
   await req("/api/community/opportunities", {

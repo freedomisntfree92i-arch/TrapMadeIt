@@ -259,19 +259,20 @@ function persistProgress(){
 const $=s=>document.querySelector(s);
 const fmt=n=>n.toLocaleString('en-GB');
 const BRIGHTNESS_STORAGE_KEY='trapmadeit.displayBrightness.v1';
-let userBrightnessScale=1;
+const EXPOSURE_BASE_GAIN=1.3;
+let userBrightnessScale=1.3;
 
 function clamp(n,min,max){ return Math.max(min,Math.min(max,n)); }
 
 function readUserBrightness(){
   const raw=Number(localStorage.getItem(BRIGHTNESS_STORAGE_KEY));
-  if(Number.isFinite(raw)) return clamp(raw,.7,1.5);
-  return 1;
+  if(Number.isFinite(raw)) return clamp(raw,.8,2.6);
+  return 1.3;
 }
 
 function applyExposureForCurrentLevel(){
   const profile=ROOM_LIGHT_PROFILES[state.level]||ROOM_LIGHT_PROFILES[0];
-  renderer.toneMappingExposure=profile.exposure*userBrightnessScale;
+  renderer.toneMappingExposure=profile.exposure*userBrightnessScale*EXPOSURE_BASE_GAIN;
 }
 
 function initDisplaySettings(){
@@ -300,7 +301,7 @@ function initDisplaySettings(){
   panel.addEventListener('click',e=>e.stopPropagation());
 
   slider.addEventListener('input',()=>{
-    userBrightnessScale=clamp(Number(slider.value)/100,.7,1.5);
+    userBrightnessScale=clamp(Number(slider.value)/100,.8,2.6);
     localStorage.setItem(BRIGHTNESS_STORAGE_KEY,String(userBrightnessScale));
     syncUI();
     applyExposureForCurrentLevel();
@@ -1178,12 +1179,12 @@ function(){
 // ==================== LEVEL LOADING ====================
 let bounds={insetX:.5,insetZ:.5};
 const ROOM_LIGHT_PROFILES=[
-  {ambient:.84, hemi:.88, directional:.9, point:.95, spot:.95, exposure:.84},
-  {ambient:.64, hemi:.7, directional:.72, point:.74, spot:.8, exposure:.78},
-  {ambient:.96, hemi:.96, directional:1, point:1.03, spot:1, exposure:.86},
-  {ambient:.74, hemi:.74, directional:.86, point:.82, spot:.82, exposure:.8},
-  {ambient:.78, hemi:.8, directional:.88, point:.84, spot:.86, exposure:.82},
-  {ambient:.8, hemi:.8, directional:.9, point:.9, spot:.9, exposure:.84},
+  {ambient:1, hemi:1, directional:.98, point:1, spot:1, exposure:1.05},
+  {ambient:.94, hemi:.95, directional:.96, point:.98, spot:1, exposure:1.0},
+  {ambient:1, hemi:1, directional:1, point:1.05, spot:1.03, exposure:1.08},
+  {ambient:.95, hemi:.95, directional:.96, point:1, spot:1, exposure:1.02},
+  {ambient:.96, hemi:.98, directional:.98, point:1, spot:1, exposure:1.03},
+  {ambient:.97, hemi:.97, directional:.98, point:1, spot:1, exposure:1.04},
 ];
 function applyRoomLightingProfile(levelIdx){
   const profile=ROOM_LIGHT_PROFILES[levelIdx]||ROOM_LIGHT_PROFILES[0];
@@ -1194,7 +1195,7 @@ function applyRoomLightingProfile(levelIdx){
     if(o?.isPointLight) o.intensity*=profile.point;
     if(o?.isSpotLight) o.intensity*=profile.spot;
   });
-  renderer.toneMappingExposure=profile.exposure*userBrightnessScale;
+  renderer.toneMappingExposure=profile.exposure*userBrightnessScale*EXPOSURE_BASE_GAIN;
   if(bulbRef?.light) bulbRef.base=bulbRef.light.intensity;
   if(tvTexRef) tvTexRef._flickerScale=profile.point;
 }

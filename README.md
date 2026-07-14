@@ -107,10 +107,10 @@ The local API now includes placeholder implementations for the full planned back
 - Ops analytics and moderation workflows
 - Community stories, opportunities, chapter events, and leaderboard
 
-Default admin login for local testing:
+Admin access for local testing:
 
-- Email: `admin@trapmadeit.local`
-- Password: `admin123`
+- Create a local admin account via `POST /api/auth/register` (set `role: "admin"`).
+- Do not ship seeded/default credentials to hosted environments.
 
 ## API Groups
 
