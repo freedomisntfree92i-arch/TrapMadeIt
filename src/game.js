@@ -43,7 +43,7 @@ const platform={
   },
   hint:{
     interact: function(){ 
-      return platform.isDesktop?'<span class="gold">E</span> to interact':'<span class="gold">TAP</span> to interact';
+      return platform.isDesktop?'<span class="gold">CLICK</span> to interact':'<span class="gold">TAP</span> to interact';
     },
     move: function(){
       return platform.isDesktop?'<span class="gold">WASD</span> to move':'<span class="gold">JOYSTICK</span> to move';
@@ -258,6 +258,57 @@ function persistProgress(){
 // ---------------- HELPERS / HUD ----------------
 const $=s=>document.querySelector(s);
 const fmt=n=>n.toLocaleString('en-GB');
+const BRIGHTNESS_STORAGE_KEY='trapmadeit.displayBrightness.v1';
+let userBrightnessScale=1;
+
+function clamp(n,min,max){ return Math.max(min,Math.min(max,n)); }
+
+function readUserBrightness(){
+  const raw=Number(localStorage.getItem(BRIGHTNESS_STORAGE_KEY));
+  if(Number.isFinite(raw)) return clamp(raw,.7,1.5);
+  return 1;
+}
+
+function applyExposureForCurrentLevel(){
+  const profile=ROOM_LIGHT_PROFILES[state.level]||ROOM_LIGHT_PROFILES[0];
+  renderer.toneMappingExposure=profile.exposure*userBrightnessScale;
+}
+
+function initDisplaySettings(){
+  const root=$('#displaySettings');
+  const cog=$('#displayCog');
+  const panel=$('#displayPanel');
+  const slider=$('#brightnessSlider');
+  const value=$('#brightnessValue');
+  if(!root||!cog||!panel||!slider||!value) return;
+
+  const syncUI=()=>{
+    const pct=Math.round(userBrightnessScale*100);
+    slider.value=String(pct);
+    value.textContent=pct+'%';
+  };
+
+  userBrightnessScale=readUserBrightness();
+  syncUI();
+  applyExposureForCurrentLevel();
+
+  cog.addEventListener('click',e=>{
+    e.stopPropagation();
+    root.classList.toggle('open');
+  });
+
+  panel.addEventListener('click',e=>e.stopPropagation());
+
+  slider.addEventListener('input',()=>{
+    userBrightnessScale=clamp(Number(slider.value)/100,.7,1.5);
+    localStorage.setItem(BRIGHTNESS_STORAGE_KEY,String(userBrightnessScale));
+    syncUI();
+    applyExposureForCurrentLevel();
+  });
+
+  document.addEventListener('click',()=>root.classList.remove('open'));
+}
+
 function toast(html,ms=3000){ const t=$('#toast'); t.innerHTML=html; t.classList.add('on');
   clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('on'),ms); }
 function setCoins(n){ state.coins=n; $('#coinAmt').textContent=fmt(n); persistProgress(); }
@@ -325,13 +376,37 @@ const camera=new THREE.PerspectiveCamera(70,innerWidth/innerHeight,.05,120);
 let yaw=0,pitch=0;
 const renderer=new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(innerWidth,innerHeight);
-renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setPixelRatio(Math.min(devicePixelRatio,platform.isDesktop?2.6:2));
+if('outputColorSpace' in renderer) renderer.outputColorSpace=THREE.SRGBColorSpace;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=.86;
 renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
+
+// Three.js >= r150 uses physically-correct lighting, so legacy point/spot intensities
+// from the original scenes need a boost to preserve the intended room mood.
+const LEGACY_POINT_SPOT_LIGHT_MULTIPLIER = 3.1;
+
+function applyLegacyLightCompatibility(node){
+  if(node?.isPointLight||node?.isSpotLight){
+    if(!node.userData._legacyBoostApplied){
+      node.intensity *= LEGACY_POINT_SPOT_LIGHT_MULTIPLIER;
+      node.userData._legacyBoostApplied = true;
+    }
+  }
+}
 
 // ---------------- SHARED TEXTURES ----------------
 function canvasTex(w,h,draw){ const c=document.createElement('canvas'); c.width=w; c.height=h;
   draw(c.getContext('2d'),w,h); return new THREE.CanvasTexture(c); }
+
+const MAX_TEXTURE_ANISOTROPY=Math.min(renderer.capabilities.getMaxAnisotropy(),12);
+function setTextureQuality(tex){
+  tex.anisotropy=MAX_TEXTURE_ANISOTROPY;
+  if('colorSpace' in tex) tex.colorSpace=THREE.SRGBColorSpace;
+  tex.needsUpdate=true;
+  return tex;
+}
 
 const floorTex=canvasTex(512,512,(g,w,h)=>{
   g.fillStyle='#241b12'; g.fillRect(0,0,w,h);
@@ -342,7 +417,7 @@ const floorTex=canvasTex(512,512,(g,w,h)=>{
   g.fillStyle='rgba(0,0,0,.35)';
   for(let i=0;i<900;i++) g.fillRect(Math.random()*w,Math.random()*h,2,2);
 });
-floorTex.wrapS=floorTex.wrapT=THREE.RepeatWrapping; floorTex.repeat.set(3,3);
+floorTex.wrapS=floorTex.wrapT=THREE.RepeatWrapping; floorTex.repeat.set(3,3); setTextureQuality(floorTex);
 
 const wallTex=canvasTex(512,512,(g,w,h)=>{
   g.fillStyle='#1d1913'; g.fillRect(0,0,w,h);
@@ -353,7 +428,7 @@ const wallTex=canvasTex(512,512,(g,w,h)=>{
     gr.addColorStop(0,'rgba(0,0,0,.35)'); gr.addColorStop(.6,'rgba(0,0,0,0)');
     g.fillStyle=gr; g.fillRect(x-14,0,28,h);}
 });
-wallTex.wrapS=wallTex.wrapT=THREE.RepeatWrapping; wallTex.repeat.set(2.5,1);
+wallTex.wrapS=wallTex.wrapT=THREE.RepeatWrapping; wallTex.repeat.set(2.5,1); setTextureQuality(wallTex);
 
 function makeTagTex(){
   const t=canvasTex(1024,512,(g,w,h)=>{
@@ -372,6 +447,7 @@ function makeTagTex(){
 const tagTex=makeTagTex();
 if(document.fonts&&document.fonts.ready) document.fonts.ready.then(()=>{
   const f=makeTagTex(); tagTex.image=f.image; tagTex.needsUpdate=true; });
+setTextureQuality(tagTex);
 
 const plasterTex=canvasTex(512,512,(g,w,h)=>{
   g.fillStyle='#cfc4ac'; g.fillRect(0,0,w,h);
@@ -385,19 +461,41 @@ const plasterTex=canvasTex(512,512,(g,w,h)=>{
   for(let i=0;i<5;i++){ g.beginPath(); let x=Math.random()*w,y=0; g.moveTo(x,y);
     for(let k=0;k<7;k++){x+=(Math.random()-.5)*44;y+=h/7;g.lineTo(x,y);} g.stroke();}
 });
-plasterTex.wrapS=plasterTex.wrapT=THREE.RepeatWrapping; plasterTex.repeat.set(2.2,1);
+plasterTex.wrapS=plasterTex.wrapT=THREE.RepeatWrapping; plasterTex.repeat.set(2.2,1); setTextureQuality(plasterTex);
 
 const tileTex=canvasTex(512,256,(g,w,h)=>{
-  g.fillStyle='#b8c9c2'; g.fillRect(0,0,w,h);
+  g.fillStyle='#a6b2ad'; g.fillRect(0,0,w,h);
   const tw=64,th=64;
   for(let y=0;y<h;y+=th) for(let x=0;x<w;x+=tw){
-    g.fillStyle=`rgb(${60+Math.random()*14},${172+Math.random()*16},${164+Math.random()*14})`;
-    g.fillRect(x+3,y+3,tw-6,th-6);
-    g.fillStyle='rgba(255,255,255,.14)'; g.fillRect(x+3,y+3,tw-6,8);
-    if(Math.random()<.18){ g.fillStyle='rgba(60,45,25,.28)';
-      g.fillRect(x+3+Math.random()*30,y+10+Math.random()*30,18,10);}}
+    const warm=150+Math.random()*26;
+    const cool=170+Math.random()*30;
+    g.fillStyle=`rgb(${warm-30},${cool-4},${cool-10})`;
+    g.fillRect(x+2,y+2,tw-4,th-4);
+    const grad=g.createLinearGradient(x+2,y+2,x+tw-2,y+th-2);
+    grad.addColorStop(0,'rgba(255,255,255,.18)');
+    grad.addColorStop(.45,'rgba(255,255,255,.04)');
+    grad.addColorStop(1,'rgba(0,0,0,.12)');
+    g.fillStyle=grad; g.fillRect(x+2,y+2,tw-4,th-4);
+    g.strokeStyle='rgba(45,55,54,.2)';
+    g.lineWidth=.8;
+    g.strokeRect(x+3.5,y+3.5,tw-7,th-7);
+    if(Math.random()<.24){
+      g.strokeStyle='rgba(90,98,96,.22)';
+      g.beginPath();
+      g.moveTo(x+6+Math.random()*16,y+16+Math.random()*24);
+      g.lineTo(x+tw-8-Math.random()*20,y+18+Math.random()*26);
+      g.stroke();
+    }
+    if(Math.random()<.14){
+      g.fillStyle='rgba(78,63,42,.17)';
+      g.fillRect(x+8+Math.random()*34,y+8+Math.random()*34,10+Math.random()*12,7+Math.random()*7);
+    }
+  }
+  g.fillStyle='rgba(58,64,64,.22)';
+  for(let x=0;x<w;x+=tw) g.fillRect(x,0,2,h);
+  for(let y=0;y<h;y+=th) g.fillRect(0,y,w,2);
 });
-tileTex.wrapS=tileTex.wrapT=THREE.RepeatWrapping;
+tileTex.wrapS=tileTex.wrapT=THREE.RepeatWrapping; setTextureQuality(tileTex);
 
 const cabTex=canvasTex(256,256,(g,w,h)=>{
   g.fillStyle='#ddd2b6'; g.fillRect(0,0,w,h);
@@ -408,6 +506,7 @@ const cabTex=canvasTex(256,256,(g,w,h)=>{
   for(let i=0;i<26;i++){ g.fillStyle='rgba(96,80,54,.5)';
     g.fillRect(Math.random()*w,h-14-Math.random()*10,6+Math.random()*10,4);}
 });
+setTextureQuality(cabTex);
 
 const boardTex=canvasTex(1024,640,(g,w,h)=>{
   g.fillStyle='#3a2c1a'; g.fillRect(0,0,w,h);
@@ -428,24 +527,67 @@ const boardTex=canvasTex(1024,640,(g,w,h)=>{
   g.beginPath(); pins.forEach(([x,y],i)=>i?g.lineTo(x,y):g.moveTo(x,y));
   g.lineTo(pins[0][0],pins[0][1]); g.stroke();
 });
+setTextureQuality(boardTex);
 
 // city skyline for Top Floor windows
 const cityTex=canvasTex(1024,384,(g,w,h)=>{
-  const gr=g.createLinearGradient(0,0,0,h);
-  gr.addColorStop(0,'#0a0e1c'); gr.addColorStop(.7,'#1a1428'); gr.addColorStop(1,'#241428');
-  g.fillStyle=gr; g.fillRect(0,0,w,h);
-  for(let i=0;i<70;i++){ g.fillStyle='rgba(255,255,255,'+(Math.random()*.6)+')';
-    g.fillRect(Math.random()*w,Math.random()*h*.3,1.6,1.6);}   // stars
-  let x=0;
-  while(x<w){
-    const bw=26+Math.random()*70, bh=h*(.25+Math.random()*.55);
-    g.fillStyle='#0d0f16'; g.fillRect(x,h-bh,bw,bh);
-    for(let wy=h-bh+8;wy<h-8;wy+=14) for(let wx=x+5;wx<x+bw-8;wx+=12)
-      if(Math.random()<.4){ g.fillStyle=Math.random()<.85?'rgba(240,205,130,.85)':'rgba(230,90,120,.9)';
-        g.fillRect(wx,wy,5,7);}
-    x+=bw+4+Math.random()*16;
+  const sky=g.createLinearGradient(0,0,0,h);
+  sky.addColorStop(0,'#050913');
+  sky.addColorStop(.34,'#0a1730');
+  sky.addColorStop(.7,'#161026');
+  sky.addColorStop(1,'#110d14');
+  g.fillStyle=sky; g.fillRect(0,0,w,h);
+  const glow=g.createRadialGradient(w*.68,h*.2,20,w*.68,h*.2,220);
+  glow.addColorStop(0,'rgba(254,214,162,.2)');
+  glow.addColorStop(1,'rgba(254,214,162,0)');
+  g.fillStyle=glow; g.fillRect(0,0,w,h);
+  for(let i=0;i<140;i++){
+    g.fillStyle='rgba(255,255,255,'+(0.15+Math.random()*.45)+')';
+    const s=.6+Math.random()*1.6;
+    g.fillRect(Math.random()*w,Math.random()*h*.42,s,s);
   }
+  const drawLayer=(baseY,minW,maxW,minH,maxH,alpha,windowChance)=>{
+    let x=-20;
+    while(x<w+40){
+      const bw=minW+Math.random()*(maxW-minW);
+      const bh=minH+Math.random()*(maxH-minH);
+      const top=baseY-bh;
+      const col=Math.floor(12+Math.random()*30);
+      g.fillStyle=`rgba(${col},${col+2},${col+8},${alpha})`;
+      g.fillRect(x,top,bw,bh);
+      const rows=Math.max(2,Math.floor((bh-10)/13));
+      const cols=Math.max(2,Math.floor((bw-10)/11));
+      for(let ry=0;ry<rows;ry++) for(let cx=0;cx<cols;cx++){
+        if(Math.random()>windowChance) continue;
+        const wx=x+5+cx*10+Math.random()*1.5;
+        const wy=top+6+ry*12+Math.random()*1.5;
+        const warm=Math.random()<.84;
+        g.fillStyle=warm
+          ? `rgba(${226+Math.random()*24},${188+Math.random()*30},${132+Math.random()*26},${0.55+Math.random()*.4})`
+          : `rgba(${140+Math.random()*28},${178+Math.random()*34},${220+Math.random()*30},${0.45+Math.random()*.3})`;
+        g.fillRect(wx,wy,4+Math.random()*2,6+Math.random()*2);
+      }
+      x+=bw+3+Math.random()*15;
+    }
+  };
+  drawLayer(h*.9,26,70,40,110,.42,.28);
+  drawLayer(h*.94,30,88,70,170,.66,.44);
+  drawLayer(h*.985,40,120,120,250,.96,.58);
+  const road=g.createLinearGradient(0,h*.78,w,h*.98);
+  road.addColorStop(0,'rgba(235,170,110,.0)');
+  road.addColorStop(.5,'rgba(235,170,110,.08)');
+  road.addColorStop(1,'rgba(235,170,110,.24)');
+  g.fillStyle=road; g.fillRect(0,h*.74,w,h*.26);
+  for(let i=0;i<180;i++){
+    g.fillStyle=Math.random()<.6?'rgba(242,130,90,.2)':'rgba(255,220,165,.2)';
+    g.fillRect(Math.random()*w,h*.72+Math.random()*h*.24,14+Math.random()*30,.8+Math.random()*1.6);
+  }
+  const haze=g.createLinearGradient(0,h*.45,0,h);
+  haze.addColorStop(0,'rgba(60,70,92,0)');
+  haze.addColorStop(1,'rgba(60,70,92,.24)');
+  g.fillStyle=haze; g.fillRect(0,h*.45,w,h*.55);
 });
+setTextureQuality(cityTex);
 
 // ---------------- SHARED MATERIALS + BUILDERS ----------------
 const M={
@@ -474,7 +616,12 @@ const M={
 
 let levelGroup=null, interactables=[], ROOM={w:11,d:9,h:3.4};
 let doorLocked=true, doorGlowRef=null, heroSpinRef=null, tvTexRef=null, dustRef=null, bulbRef=null;
-function G(o){ levelGroup.add(o); return o; }
+function G(o){
+  if(o?.traverse) o.traverse(applyLegacyLightCompatibility);
+  else applyLegacyLightCompatibility(o);
+  levelGroup.add(o);
+  return o;
+}
 function tagInteract(o,name,action){ o.userData={name,action}; interactables.push(o); }
 function shadows(o){ o.traverse(m=>{ if(m.isMesh){m.castShadow=m.receiveShadow=true;} }); return o; }
 
@@ -503,7 +650,7 @@ function bulb(x,y,z,intensity=1.4){
   const wr=new THREE.Mesh(new THREE.CylinderGeometry(.008,.008,ROOM.h-y,6),
     new THREE.MeshBasicMaterial({color:0x090909}));
   wr.position.set(x,(y+ROOM.h)/2,z); G(wr);
-  bulbRef={light:l,mesh:b,base:intensity};
+  bulbRef={light:l,mesh:b,base:l.intensity};
   return l;
 }
 function dustMotes(color=0xc9b58a,op=.5){
@@ -793,6 +940,7 @@ function(){
   // old TV with live static
   const tvCanvas=document.createElement('canvas'); tvCanvas.width=64; tvCanvas.height=48;
   tvTexRef=new THREE.CanvasTexture(tvCanvas); tvTexRef._ctx=tvCanvas.getContext('2d');
+  tvTexRef._flickerScale=1;
   const tvBody=new THREE.Mesh(new THREE.BoxGeometry(1.1,.85,.7),
     new THREE.MeshStandardMaterial({color:0x211d18,roughness:.7}));
   tvBody.position.set(1.8,1.02,-3.7); shadows(tvBody); G(tvBody);
@@ -1029,6 +1177,27 @@ function(){
 
 // ==================== LEVEL LOADING ====================
 let bounds={insetX:.5,insetZ:.5};
+const ROOM_LIGHT_PROFILES=[
+  {ambient:.84, hemi:.88, directional:.9, point:.95, spot:.95, exposure:.84},
+  {ambient:.64, hemi:.7, directional:.72, point:.74, spot:.8, exposure:.78},
+  {ambient:.96, hemi:.96, directional:1, point:1.03, spot:1, exposure:.86},
+  {ambient:.74, hemi:.74, directional:.86, point:.82, spot:.82, exposure:.8},
+  {ambient:.78, hemi:.8, directional:.88, point:.84, spot:.86, exposure:.82},
+  {ambient:.8, hemi:.8, directional:.9, point:.9, spot:.9, exposure:.84},
+];
+function applyRoomLightingProfile(levelIdx){
+  const profile=ROOM_LIGHT_PROFILES[levelIdx]||ROOM_LIGHT_PROFILES[0];
+  levelGroup.traverse(o=>{
+    if(o?.isAmbientLight) o.intensity*=profile.ambient;
+    if(o?.isHemisphereLight) o.intensity*=profile.hemi;
+    if(o?.isDirectionalLight) o.intensity*=profile.directional;
+    if(o?.isPointLight) o.intensity*=profile.point;
+    if(o?.isSpotLight) o.intensity*=profile.spot;
+  });
+  renderer.toneMappingExposure=profile.exposure*userBrightnessScale;
+  if(bulbRef?.light) bulbRef.base=bulbRef.light.intensity;
+  if(tvTexRef) tvTexRef._flickerScale=profile.point;
+}
 function loadLevel(i, showIntro=true){
   state.level=i;
   doorLocked=false; doorGlowRef=null; heroSpinRef=null; tvTexRef=null; dustRef=null; bulbRef=null;
@@ -1040,6 +1209,7 @@ function loadLevel(i, showIntro=true){
   interactables=[]; hoverObj=null;
   levelGroup=new THREE.Group(); scene.add(levelGroup);
   const cfg=BUILDERS[i]();
+  applyRoomLightingProfile(i);
   doorLocked=!missionsDone();               // stays open if somehow already cleared
   scene.fog=new THREE.FogExp2(cfg.fog[0],cfg.fog[1]);
   scene.background=new THREE.Color(cfg.bg);
@@ -1081,6 +1251,14 @@ const keys={};
 const pointerLockSupported=typeof renderer.domElement.requestPointerLock==='function';
 let mouseLookLocked=false;
 
+function refreshDesktopControlHint(){
+  const hintEl=$('#desktopControlsHint');
+  if(!hintEl||!platform.isDesktop) return;
+  hintEl.innerHTML=(mouseLookLocked||!pointerLockSupported)
+    ? '<b>W A S D</b> - move<br><b>Mouse</b> - look<br><b>Click</b> - interact<br><b>Esc</b> - deactivate mouse look'
+    : '<b>W A S D</b> - move<br><b>Click</b> - activate mouse look<br><b>Esc</b> - release cursor';
+}
+
 function lockMouseLook(){
   if(!pointerLockSupported||!controls.enabled) return;
   renderer.domElement.requestPointerLock();
@@ -1096,7 +1274,6 @@ addEventListener('keydown',e=>{
   if(controls.enabled&&(e.code==='KeyW'||e.code==='KeyA'||e.code==='KeyS'||e.code==='KeyD'||e.code==='ArrowUp'||e.code==='ArrowDown'||e.code==='ArrowLeft'||e.code==='ArrowRight'))
     e.preventDefault();
   keys[e.code]=true;
-  if(e.code==='KeyE'&&controls.enabled) tryInteract();
   if(e.code==='Escape') unlockMouseLook();
 });
 addEventListener('keyup',e=>keys[e.code]=false);
@@ -1105,10 +1282,12 @@ addEventListener('keyup',e=>keys[e.code]=false);
 if(pointerLockSupported){
   document.addEventListener('pointerlockchange',()=>{
     mouseLookLocked=document.pointerLockElement===renderer.domElement;
+    refreshDesktopControlHint();
     if(!mouseLookLocked) document.body.style.cursor='auto';
   });
   document.addEventListener('pointerlockerror',()=>{ 
     mouseLookLocked=false;
+    refreshDesktopControlHint();
     document.body.style.cursor='auto';
   });
 }
@@ -1125,7 +1304,12 @@ renderer.domElement.addEventListener('pointerdown',e=>{
       lockMouseLook();
       return;
     }
-    // While locked, pointer down doesn't do anything - let E key handle interact
+    tryInteract();
+    return;
+  }
+
+  if(e.pointerType==='mouse'){
+    tryInteract();
     return;
   }
 
@@ -1343,10 +1527,12 @@ $('#enterBtn').addEventListener('click',async ()=>{
   $('#hud').classList.add('on');
   controls.enabled=true;
   setCoins(state.coins);
+  initDisplaySettings();
   loadLevel(state.level||0);
   queuePlayerEvent('session_start',{ levelIndex: state.level||0 });
   if(isTouchDevice)
     setTimeout(()=>toast(platform.hint.lockHint(),3000),1200);
+  refreshDesktopControlHint();
   setTimeout(()=>toast('SIX LEVELS BETWEEN YOU AND THE WAREHOUSE — <span class="gold">FIND THE DRAWING BOARD</span>',4600),2800);
   persistProgress();
 });
@@ -1373,7 +1559,7 @@ function loop(now){
     for(let i=0;i<im.data.length;i+=4){ const v=Math.random()*255;
       im.data[i]=v; im.data[i+1]=v; im.data[i+2]=v+20; im.data[i+3]=255; }
     g.putImageData(im,0,0); tvTexRef.needsUpdate=true;
-    tvTexRef._light.intensity=1.0+Math.random()*.5;
+    tvTexRef._light.intensity=(1.0+Math.random()*.5)*LEGACY_POINT_SPOT_LIGHT_MULTIPLIER*(tvTexRef._flickerScale||1);
   }
   if(doorGlowRef&&!doorLocked) doorGlowRef.material.emissiveIntensity=1.0+Math.sin(now*.004)*.45;
   if(dustRef) dustRef.rotation.y+=dt*.012;

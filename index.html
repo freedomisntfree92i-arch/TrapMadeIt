@@ -53,8 +53,16 @@ You're viewing this in an email preview, which can't run the game.<br>
       </div>
     </div>
   </div>
-  <div class="controls-hint">
-    <b>W A S D</b> — move<br><b>Drag</b> — look<br><b>Click</b> — interact
+  <div class="controls-hint" id="desktopControlsHint">
+    <b>W A S D</b> - move<br><b>Click</b> - activate mouse look<br><b>Esc</b> - release cursor
+  </div>
+  <div class="display-settings" id="displaySettings">
+    <button id="displayCog" class="display-cog" aria-label="Display settings" title="Display settings">⚙</button>
+    <div class="display-panel" id="displayPanel">
+      <div class="dp-title">Display</div>
+      <label for="brightnessSlider">Brightness <span id="brightnessValue">100%</span></label>
+      <input id="brightnessSlider" type="range" min="70" max="150" step="1" value="100" />
+    </div>
   </div>
 </div>
 
