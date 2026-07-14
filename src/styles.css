@@ -104,6 +104,11 @@ src:url(data:font/woff2;base64,d09GMgABAAAAAFesABEAAAAA00QAAFdIAAEAAAAAAAAAAAAAA
   .display-panel .dp-title{font-size:10px;letter-spacing:.35em;text-transform:uppercase;color:var(--gold);margin-bottom:10px}
   .display-panel label{display:flex;justify-content:space-between;align-items:center;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--bone-dim)}
   .display-panel input[type="range"]{width:100%;margin-top:10px;accent-color:var(--gold)}
+  .display-panel select{width:100%;margin:8px 0 10px;background:rgba(14,12,10,.92);color:var(--bone);
+    border:1px solid var(--line);padding:8px 9px;font-size:12px;letter-spacing:.08em;text-transform:uppercase}
+  .display-reset-btn{width:100%;margin-top:12px;background:rgba(18,15,12,.88);border:1px solid var(--line);
+    color:var(--gold);padding:8px 10px;cursor:pointer;font-size:11px;letter-spacing:.18em;text-transform:uppercase}
+  .display-reset-btn:hover{border-color:var(--gold)}
   #crosshair{position:absolute;top:50%;left:50%;width:5px;height:5px;border-radius:50%;
     background:rgba(232,224,208,.55);transform:translate(-50%,-50%);transition:all .15s ease}
   #crosshair.hot{width:9px;height:9px;background:var(--gold);box-shadow:0 0 12px var(--gold)}

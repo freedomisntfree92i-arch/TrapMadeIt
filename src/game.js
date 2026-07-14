@@ -1,4 +1,7 @@
 import * as THREE from "three";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { getContent, getContentRemoteFirst } from "./data/contentStore";
 import {
   createDefaultPlayerProfile,
@@ -258,21 +261,28 @@ function persistProgress(){
 // ---------------- HELPERS / HUD ----------------
 const $=s=>document.querySelector(s);
 const fmt=n=>n.toLocaleString('en-GB');
-const BRIGHTNESS_STORAGE_KEY='trapmadeit.displayBrightness.v1';
 const EXPOSURE_BASE_GAIN=1.3;
 let userBrightnessScale=1.3;
 
 function clamp(n,min,max){ return Math.max(min,Math.min(max,n)); }
 
-function readUserBrightness(){
-  const raw=Number(localStorage.getItem(BRIGHTNESS_STORAGE_KEY));
-  if(Number.isFinite(raw)) return clamp(raw,.8,2.6);
-  return 1.3;
-}
-
 function applyExposureForCurrentLevel(){
   const profile=ROOM_LIGHT_PROFILES[state.level]||ROOM_LIGHT_PROFILES[0];
   renderer.toneMappingExposure=profile.exposure*userBrightnessScale*EXPOSURE_BASE_GAIN;
+}
+
+function applyVisualSettings(){
+  userBrightnessScale=clamp(Number(visualSettings.brightness)||1.3,.8,2.6);
+  setRendererQuality();
+  if(levelGroup) levelGroup.traverse(applyLightQuality);
+  applyExposureForCurrentLevel();
+  const q=qualityProfile();
+  if(bloomPass){
+    bloomPass.enabled=!!q.bloom;
+    bloomPass.strength=q.bloomStrength+(visualSettings.bloom||0)*.6;
+    bloomPass.radius=q.bloomRadius;
+    bloomPass.threshold=q.bloomThreshold;
+  }
 }
 
 function initDisplaySettings(){
@@ -281,17 +291,29 @@ function initDisplaySettings(){
   const panel=$('#displayPanel');
   const slider=$('#brightnessSlider');
   const value=$('#brightnessValue');
-  if(!root||!cog||!panel||!slider||!value) return;
+  const quality=$('#qualitySelect');
+  const bloom=$('#bloomSlider');
+  const bloomValue=$('#bloomValue');
+  const resetBtn=$('#displayResetBtn');
+  if(!root||!cog||!panel||!slider||!value||!quality||!bloom||!bloomValue||!resetBtn) return;
 
   const syncUI=()=>{
-    const pct=Math.round(userBrightnessScale*100);
+    const pct=Math.round((visualSettings.brightness||1.3)*100);
     slider.value=String(pct);
     value.textContent=pct+'%';
+    quality.value=visualSettings.quality;
+    const glowPct=Math.round((visualSettings.bloom||0)*100);
+    bloom.value=String(glowPct);
+    bloomValue.textContent=glowPct+'%';
   };
 
-  userBrightnessScale=readUserBrightness();
+  loadVisualSettings();
+  userBrightnessScale=clamp(Number(visualSettings.brightness)||1.3,.8,2.6);
+  visualSettings.brightness=userBrightnessScale;
+  visualSettings.quality=QUALITY_PROFILES[visualSettings.quality]?visualSettings.quality:(platform.isDesktop?'high':'medium');
+  visualSettings.bloom=clamp(Number(visualSettings.bloom)||0,.0,.6);
   syncUI();
-  applyExposureForCurrentLevel();
+  applyVisualSettings();
 
   cog.addEventListener('click',e=>{
     e.stopPropagation();
@@ -301,10 +323,35 @@ function initDisplaySettings(){
   panel.addEventListener('click',e=>e.stopPropagation());
 
   slider.addEventListener('input',()=>{
-    userBrightnessScale=clamp(Number(slider.value)/100,.8,2.6);
-    localStorage.setItem(BRIGHTNESS_STORAGE_KEY,String(userBrightnessScale));
+    visualSettings.brightness=clamp(Number(slider.value)/100,.8,2.6);
     syncUI();
-    applyExposureForCurrentLevel();
+    applyVisualSettings();
+    saveVisualSettings();
+  });
+
+  quality.addEventListener('change',()=>{
+    visualSettings.quality=quality.value;
+    syncUI();
+    applyVisualSettings();
+    saveVisualSettings();
+  });
+
+  bloom.addEventListener('input',()=>{
+    visualSettings.bloom=clamp(Number(bloom.value)/100,.0,.6);
+    syncUI();
+    applyVisualSettings();
+    saveVisualSettings();
+  });
+
+  resetBtn.addEventListener('click',()=>{
+    visualSettings={
+      quality:platform.isDesktop?'high':'medium',
+      brightness:1.3,
+      bloom:0.25,
+    };
+    syncUI();
+    applyVisualSettings();
+    saveVisualSettings();
   });
 
   document.addEventListener('click',()=>root.classList.remove('open'));
@@ -383,6 +430,51 @@ renderer.toneMapping=THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure=.86;
 renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
+
+const VISUAL_SETTINGS_STORAGE_KEY='trapmadeit.visualSettings.v1';
+const QUALITY_PROFILES={
+  low:{maxPixelRatio:1.2, shadows:false, bloom:false, bloomStrength:.05, bloomRadius:.35, bloomThreshold:.95, shadowMapSize:512},
+  medium:{maxPixelRatio:1.6, shadows:true, bloom:true, bloomStrength:.16, bloomRadius:.45, bloomThreshold:.88, shadowMapSize:1024},
+  high:{maxPixelRatio:2.2, shadows:true, bloom:true, bloomStrength:.24, bloomRadius:.55, bloomThreshold:.8, shadowMapSize:2048},
+};
+let visualSettings={
+  quality:platform.isDesktop?'high':'medium',
+  brightness:1.3,
+  bloom:0.25,
+};
+let composer;
+let bloomPass;
+
+function loadVisualSettings(){
+  try{
+    const raw=localStorage.getItem(VISUAL_SETTINGS_STORAGE_KEY);
+    if(!raw) return;
+    const parsed=JSON.parse(raw);
+    if(parsed&&typeof parsed==='object') visualSettings={...visualSettings,...parsed};
+  }catch(_e){}
+}
+
+function saveVisualSettings(){
+  localStorage.setItem(VISUAL_SETTINGS_STORAGE_KEY,JSON.stringify(visualSettings));
+}
+
+function qualityProfile(){
+  return QUALITY_PROFILES[visualSettings.quality]||QUALITY_PROFILES.high;
+}
+
+function setRendererQuality(){
+  const q=qualityProfile();
+  renderer.setPixelRatio(Math.min(devicePixelRatio,q.maxPixelRatio));
+  renderer.shadowMap.enabled=q.shadows;
+}
+
+function setupPostProcessing(){
+  composer=new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene,camera));
+  bloomPass=new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight),.2,.5,.85);
+  composer.addPass(bloomPass);
+}
+setupPostProcessing();
 
 // Three.js >= r150 uses physically-correct lighting, so legacy point/spot intensities
 // from the original scenes need a boost to preserve the intended room mood.
@@ -617,9 +709,21 @@ const M={
 
 let levelGroup=null, interactables=[], ROOM={w:11,d:9,h:3.4};
 let doorLocked=true, doorGlowRef=null, heroSpinRef=null, tvTexRef=null, dustRef=null, bulbRef=null;
+function applyLightQuality(node){
+  if(!(node?.isPointLight||node?.isSpotLight||node?.isDirectionalLight)) return;
+  const q=qualityProfile();
+  if(node.castShadow&&node.shadow?.mapSize){
+    node.shadow.mapSize.set(q.shadowMapSize,q.shadowMapSize);
+    node.shadow.needsUpdate=true;
+  }
+}
 function G(o){
-  if(o?.traverse) o.traverse(applyLegacyLightCompatibility);
-  else applyLegacyLightCompatibility(o);
+  if(o?.traverse){
+    o.traverse(node=>{ applyLegacyLightCompatibility(node); applyLightQuality(node); });
+  }else{
+    applyLegacyLightCompatibility(o);
+    applyLightQuality(o);
+  }
   levelGroup.add(o);
   return o;
 }
@@ -1464,7 +1568,7 @@ function sizeViewer(){
   const r=wrap.getBoundingClientRect();
   if(r.width<10) return;
   vRenderer.setSize(r.width,r.height,false);
-  vRenderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  vRenderer.setPixelRatio(Math.min(devicePixelRatio,qualityProfile().maxPixelRatio));
   vCam.aspect=r.width/r.height; vCam.updateProjectionMatrix();
 }
 function openShop(pi){
@@ -1541,7 +1645,10 @@ $('#enterBtn').addEventListener('click',async ()=>{
 // ==================== LOOP ====================
 addEventListener('resize',()=>{
   camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth,innerHeight); sizeViewer();
+  renderer.setSize(innerWidth,innerHeight);
+  if(composer) composer.setSize(innerWidth,innerHeight);
+  setRendererQuality();
+  sizeViewer();
 });
 let last=performance.now();
 function loop(now){
@@ -1574,7 +1681,8 @@ function loop(now){
       if(o) $('#hoverTag').innerHTML=`${o.userData.name}<br><span style="font-size:0.8em;opacity:0.8">${platform.hint.interact()}</span>`;
     }
   }
-  renderer.render(scene,camera);
+  if(composer) composer.render();
+  else renderer.render(scene,camera);
   if($('#shopPanel').classList.contains('open')&&vSuit){
     if(vAuto) vSpin+=dt*.7;
     vSuit.rotation.y=vSpin; vDisc.rotation.y=vSpin;
