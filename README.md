@@ -95,6 +95,7 @@ http://localhost:8787/api/health
 - Optimization (code-splitting and lazy loading) can be tackled as the next step.
 - Admin scaffold now syncs to local mock API with local fallback and supports JSON import/export for handoff/versioning.
 - Mock API data persists in SQLite at `server/storage/trapmadeit.db`.
+- Render pipeline baseline and asset migration plan are documented in `docs/RENDER-PIPELINE.md`.
 
 ## Mock API Scope
 

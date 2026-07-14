@@ -2,6 +2,8 @@ import * as THREE from "three";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
+import { createAssetPipeline } from "./render/assetPipeline";
+import { DEFAULT_VISUAL_SETTINGS, QUALITY_PROFILES, ROOM_LIGHT_PROFILES } from "./render/qualityProfiles";
 import { getContent, getContentRemoteFirst } from "./data/contentStore";
 import {
   createDefaultPlayerProfile,
@@ -432,18 +434,14 @@ renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
 
 const VISUAL_SETTINGS_STORAGE_KEY='trapmadeit.visualSettings.v1';
-const QUALITY_PROFILES={
-  low:{maxPixelRatio:1.2, shadows:false, bloom:false, bloomStrength:.05, bloomRadius:.35, bloomThreshold:.95, shadowMapSize:512},
-  medium:{maxPixelRatio:1.6, shadows:true, bloom:true, bloomStrength:.16, bloomRadius:.45, bloomThreshold:.88, shadowMapSize:1024},
-  high:{maxPixelRatio:2.2, shadows:true, bloom:true, bloomStrength:.24, bloomRadius:.55, bloomThreshold:.8, shadowMapSize:2048},
-};
 let visualSettings={
+  ...DEFAULT_VISUAL_SETTINGS,
   quality:platform.isDesktop?'high':'medium',
-  brightness:1.3,
-  bloom:0.25,
 };
 let composer;
 let bloomPass;
+const assetPipeline=createAssetPipeline(renderer);
+window.__trapAssetPipeline=assetPipeline;
 
 function loadVisualSettings(){
   try{
@@ -1282,14 +1280,6 @@ function(){
 
 // ==================== LEVEL LOADING ====================
 let bounds={insetX:.5,insetZ:.5};
-const ROOM_LIGHT_PROFILES=[
-  {ambient:1, hemi:1, directional:.98, point:1, spot:1, exposure:1.05},
-  {ambient:.94, hemi:.95, directional:.96, point:.98, spot:1, exposure:1.0},
-  {ambient:1, hemi:1, directional:1, point:1.05, spot:1.03, exposure:1.08},
-  {ambient:.95, hemi:.95, directional:.96, point:1, spot:1, exposure:1.02},
-  {ambient:.96, hemi:.98, directional:.98, point:1, spot:1, exposure:1.03},
-  {ambient:.97, hemi:.97, directional:.98, point:1, spot:1, exposure:1.04},
-];
 function applyRoomLightingProfile(levelIdx){
   const profile=ROOM_LIGHT_PROFILES[levelIdx]||ROOM_LIGHT_PROFILES[0];
   levelGroup.traverse(o=>{
