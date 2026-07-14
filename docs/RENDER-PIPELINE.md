@@ -20,6 +20,9 @@ All settings are wired globally in runtime and affect all rooms.
 - `src/render/assetPipeline.js`
   - GLTF + DRACO + KTX2 + HDR loader scaffold
   - PMREM-ready HDR environment conversion helper
+- `src/render/roomAssetRegistry.js`
+  - Per-room asset slots for GLB/HDR migration
+  - Procedural fallback remains active when slots are empty
 
 ## Asset Structure
 
@@ -30,9 +33,15 @@ All settings are wired globally in runtime and affect all rooms.
 ## Migration Strategy (Project-Wide)
 
 1. Keep current procedural rooms as fallback.
-2. Introduce room-level GLB assets incrementally (all rooms, one by one).
+2. Fill `src/render/roomAssetRegistry.js` entries with `modelUrl` and `environmentUrl` incrementally.
 3. Standardize each room to PBR materials and authored lighting.
 4. Use same quality tiers and post effects for all rooms.
+
+## Runtime Behavior
+
+- `loadLevel()` now attempts to apply a room asset layer after building the procedural room.
+- If no room assets are assigned, current behavior is unchanged.
+- If a room GLB/HDR is assigned later, it plugs into the same runtime without changing gameplay flow.
 
 ## Performance Notes
 

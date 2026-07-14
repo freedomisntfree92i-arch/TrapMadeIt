@@ -18,12 +18,28 @@ export function createAssetPipeline(renderer){
 
   const rgbeLoader=new RGBELoader();
   const pmremGenerator=new PMREMGenerator(renderer);
+  const gltfCache=new Map();
+  const envCache=new Map();
+
+  async function loadGLTF(modelUrl){
+    if(!gltfCache.has(modelUrl)) gltfCache.set(modelUrl,gltfLoader.loadAsync(modelUrl));
+    const gltf=await gltfCache.get(modelUrl);
+    return {
+      ...gltf,
+      scene:gltf.scene.clone(true),
+    };
+  }
 
   async function loadEnvironmentHDR(hdrUrl){
-    const hdrTexture=await rgbeLoader.loadAsync(hdrUrl);
-    const envMap=pmremGenerator.fromEquirectangular(hdrTexture).texture;
-    hdrTexture.dispose();
-    return envMap;
+    if(!envCache.has(hdrUrl)){
+      envCache.set(hdrUrl,(async()=>{
+        const hdrTexture=await rgbeLoader.loadAsync(hdrUrl);
+        const envMap=pmremGenerator.fromEquirectangular(hdrTexture).texture;
+        hdrTexture.dispose();
+        return envMap;
+      })());
+    }
+    return envCache.get(hdrUrl);
   }
 
   return {
@@ -31,9 +47,16 @@ export function createAssetPipeline(renderer){
     rgbeLoader,
     ktx2Loader,
     dracoLoader,
+    loadGLTF,
     loadEnvironmentHDR,
     dispose(){
       pmremGenerator.dispose();
+      envCache.forEach(async(promise)=>{
+        const tex=await promise;
+        tex.dispose();
+      });
+      gltfCache.clear();
+      envCache.clear();
       ktx2Loader.dispose();
       dracoLoader.dispose();
     },

@@ -4,6 +4,7 @@ import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { createAssetPipeline } from "./render/assetPipeline";
 import { DEFAULT_VISUAL_SETTINGS, QUALITY_PROFILES, ROOM_LIGHT_PROFILES } from "./render/qualityProfiles";
+import { applyRoomAssetLayer } from "./render/roomAssetRegistry";
 import { getContent, getContentRemoteFirst } from "./data/contentStore";
 import {
   createDefaultPlayerProfile,
@@ -707,6 +708,7 @@ const M={
 
 let levelGroup=null, interactables=[], ROOM={w:11,d:9,h:3.4};
 let doorLocked=true, doorGlowRef=null, heroSpinRef=null, tvTexRef=null, dustRef=null, bulbRef=null;
+let activeRoomAssetRequest=0;
 function applyLightQuality(node){
   if(!(node?.isPointLight||node?.isSpotLight||node?.isDirectionalLight)) return;
   const q=qualityProfile();
@@ -1295,6 +1297,7 @@ function applyRoomLightingProfile(levelIdx){
 }
 function loadLevel(i, showIntro=true){
   state.level=i;
+  const roomAssetRequest=++activeRoomAssetRequest;
   doorLocked=false; doorGlowRef=null; heroSpinRef=null; tvTexRef=null; dustRef=null; bulbRef=null;
   // tear down previous
   if(levelGroup){
@@ -1306,8 +1309,17 @@ function loadLevel(i, showIntro=true){
   const cfg=BUILDERS[i]();
   applyRoomLightingProfile(i);
   doorLocked=!missionsDone();               // stays open if somehow already cleared
+  scene.environment=null;
   scene.fog=new THREE.FogExp2(cfg.fog[0],cfg.fog[1]);
   scene.background=new THREE.Color(cfg.bg);
+  applyRoomAssetLayer({
+    levelIndex:i,
+    levelGroup,
+    scene,
+    assetPipeline,
+    decorateNode:applyLightQuality,
+    shouldApply:()=>roomAssetRequest===activeRoomAssetRequest&&levelGroup?.parent===scene,
+  }).catch(err=>console.warn("Room asset layer failed",err));
   bounds={insetX:cfg.insetX,insetZ:cfg.insetZ};
   camera.position.set(cfg.spawn[0],1.6,cfg.spawn[1]);
   yaw=cfg.yaw; pitch=0;
