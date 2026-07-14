@@ -1295,6 +1295,15 @@ function applyRoomLightingProfile(levelIdx){
   if(bulbRef?.light) bulbRef.base=bulbRef.light.intensity;
   if(tvTexRef) tvTexRef._flickerScale=profile.point;
 }
+function applySceneConfigOverrides(sceneConfig){
+  if(!sceneConfig) return;
+  if(sceneConfig.fog) scene.fog=new THREE.FogExp2(sceneConfig.fog[0],sceneConfig.fog[1]);
+  if(sceneConfig.background!==undefined) scene.background=new THREE.Color(sceneConfig.background);
+  if(sceneConfig.bounds) bounds={insetX:sceneConfig.bounds.insetX,insetZ:sceneConfig.bounds.insetZ};
+  if(sceneConfig.spawn) camera.position.set(sceneConfig.spawn[0],sceneConfig.spawn[1]??1.6,sceneConfig.spawn[2]);
+  if(typeof sceneConfig.yaw==="number") yaw=sceneConfig.yaw;
+  if(typeof sceneConfig.pitch==="number") pitch=sceneConfig.pitch;
+}
 function loadLevel(i, showIntro=true){
   state.level=i;
   const roomAssetRequest=++activeRoomAssetRequest;
@@ -1319,6 +1328,10 @@ function loadLevel(i, showIntro=true){
     assetPipeline,
     decorateNode:applyLightQuality,
     shouldApply:()=>roomAssetRequest===activeRoomAssetRequest&&levelGroup?.parent===scene,
+  }).then(result=>{
+    if(!result?.applied) return;
+    if(roomAssetRequest!==activeRoomAssetRequest||levelGroup?.parent!==scene) return;
+    applySceneConfigOverrides(result.sceneConfig);
   }).catch(err=>console.warn("Room asset layer failed",err));
   bounds={insetX:cfg.insetX,insetZ:cfg.insetZ};
   camera.position.set(cfg.spawn[0],1.6,cfg.spawn[1]);

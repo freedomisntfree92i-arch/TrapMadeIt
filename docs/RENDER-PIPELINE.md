@@ -43,6 +43,27 @@ All settings are wired globally in runtime and affect all rooms.
 - If no room assets are assigned, current behavior is unchanged.
 - If a room GLB/HDR is assigned later, it plugs into the same runtime without changing gameplay flow.
 
+## Room Asset Registry Fields
+
+Each room entry in `src/render/roomAssetRegistry.js` can now define:
+
+- `modelUrl`: path to a `.glb/.gltf`
+- `environmentUrl`: path to an HDR environment
+- `hideProcedural`: hide generated room meshes when authored room is loaded
+- `transform`: position / rotation / scale for imported room root
+- `sceneConfig`:
+  - `fog: [colorHex, density]`
+  - `background: colorHex`
+  - `spawn: [x, y, z]`
+  - `yaw`, `pitch`
+  - `bounds: { insetX, insetZ }`
+- `materialTuning`:
+  - `envMapIntensity`
+  - `roughness`
+  - `metalness`
+  - `normalScale`
+  - `flatShading`
+
 ## Performance Notes
 
 - Android-first: use `medium` default for device thermal stability.

@@ -1,10 +1,10 @@
 export const ROOM_ASSET_REGISTRY={
-  0:{ key:"lvl-01", label:"The Come Up", modelUrl:null, environmentUrl:null, hideProcedural:false },
-  1:{ key:"lvl-02", label:"The Cook Up", modelUrl:null, environmentUrl:null, hideProcedural:false },
-  2:{ key:"lvl-03", label:"The Graveyard Shift", modelUrl:null, environmentUrl:null, hideProcedural:false },
-  3:{ key:"lvl-04", label:"The Front", modelUrl:null, environmentUrl:null, hideProcedural:false },
-  4:{ key:"lvl-05", label:"Top Floor", modelUrl:null, environmentUrl:null, hideProcedural:false },
-  5:{ key:"lvl-06", label:"The Warehouse", modelUrl:null, environmentUrl:null, hideProcedural:false },
+  0:{ key:"lvl-01", label:"The Come Up", modelUrl:null, environmentUrl:null, hideProcedural:false, sceneConfig:null, materialTuning:null },
+  1:{ key:"lvl-02", label:"The Cook Up", modelUrl:null, environmentUrl:null, hideProcedural:false, sceneConfig:null, materialTuning:null },
+  2:{ key:"lvl-03", label:"The Graveyard Shift", modelUrl:null, environmentUrl:null, hideProcedural:false, sceneConfig:null, materialTuning:null },
+  3:{ key:"lvl-04", label:"The Front", modelUrl:null, environmentUrl:null, hideProcedural:false, sceneConfig:null, materialTuning:null },
+  4:{ key:"lvl-05", label:"Top Floor", modelUrl:null, environmentUrl:null, hideProcedural:false, sceneConfig:null, materialTuning:null },
+  5:{ key:"lvl-06", label:"The Warehouse", modelUrl:null, environmentUrl:null, hideProcedural:false, sceneConfig:null, materialTuning:null },
 };
 
 function applyTransform(target, transform={}){
@@ -15,6 +15,23 @@ function applyTransform(target, transform={}){
     if(Array.isArray(scale)) target.scale.set(scale[0]||1,scale[1]||1,scale[2]||1);
     else target.scale.setScalar(scale||1);
   }
+}
+
+function tuneMaterial(material, tuning={}){
+  if(!material) return;
+  if(typeof tuning.envMapIntensity==="number"&&"envMapIntensity" in material) material.envMapIntensity=tuning.envMapIntensity;
+  if(typeof tuning.roughness==="number"&&"roughness" in material) material.roughness=tuning.roughness;
+  if(typeof tuning.metalness==="number"&&"metalness" in material) material.metalness=tuning.metalness;
+  if(typeof tuning.normalScale==="number"&&material.normalScale?.setScalar) material.normalScale.setScalar(tuning.normalScale);
+  if(typeof tuning.flatShading==="boolean"&&"flatShading" in material) material.flatShading=tuning.flatShading;
+  material.needsUpdate=true;
+}
+
+function applyMaterialTuning(node, entry){
+  const tuning=entry.materialTuning;
+  if(!node.isMesh||!tuning) return;
+  if(Array.isArray(node.material)) node.material.forEach(mat=>tuneMaterial(mat,tuning));
+  else tuneMaterial(node.material,tuning);
 }
 
 export async function applyRoomAssetLayer({
@@ -47,11 +64,12 @@ export async function applyRoomAssetLayer({
         node.castShadow=true;
         node.receiveShadow=true;
       }
+      applyMaterialTuning(node,entry);
       if(decorateNode) decorateNode(node);
     });
     if(existingChildren) existingChildren.forEach(child=>{ child.visible=false; });
     levelGroup.add(roomRoot);
   }
 
-  return { applied:true, entry };
+  return { applied:true, entry, sceneConfig:entry.sceneConfig||null };
 }
