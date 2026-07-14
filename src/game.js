@@ -3,6 +3,7 @@ import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { createAssetPipeline } from "./render/assetPipeline";
+import { detectRenderDeviceProfile } from "./render/deviceProfile";
 import { DEFAULT_VISUAL_SETTINGS, QUALITY_PROFILES, ROOM_LIGHT_PROFILES } from "./render/qualityProfiles";
 import { applyRoomAssetLayer } from "./render/roomAssetRegistry";
 import { getContent, getContentRemoteFirst } from "./data/contentStore";
@@ -313,7 +314,7 @@ function initDisplaySettings(){
   loadVisualSettings();
   userBrightnessScale=clamp(Number(visualSettings.brightness)||1.3,.8,2.6);
   visualSettings.brightness=userBrightnessScale;
-  visualSettings.quality=QUALITY_PROFILES[visualSettings.quality]?visualSettings.quality:(platform.isDesktop?'high':'medium');
+  visualSettings.quality=QUALITY_PROFILES[visualSettings.quality]?visualSettings.quality:deviceProfile.tier;
   visualSettings.bloom=clamp(Number(visualSettings.bloom)||0,.0,.6);
   syncUI();
   applyVisualSettings();
@@ -348,7 +349,7 @@ function initDisplaySettings(){
 
   resetBtn.addEventListener('click',()=>{
     visualSettings={
-      quality:platform.isDesktop?'high':'medium',
+      quality:deviceProfile.tier,
       brightness:1.3,
       bloom:0.25,
     };
@@ -435,14 +436,16 @@ renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
 
 const VISUAL_SETTINGS_STORAGE_KEY='trapmadeit.visualSettings.v1';
+const deviceProfile=detectRenderDeviceProfile(platform);
 let visualSettings={
   ...DEFAULT_VISUAL_SETTINGS,
-  quality:platform.isDesktop?'high':'medium',
+  quality:deviceProfile.tier,
 };
 let composer;
 let bloomPass;
 const assetPipeline=createAssetPipeline(renderer);
 window.__trapAssetPipeline=assetPipeline;
+window.__trapRenderDeviceProfile=deviceProfile;
 
 function loadVisualSettings(){
   try{

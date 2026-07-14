@@ -8,6 +8,7 @@ This project now uses a project-wide visual pipeline designed to scale from styl
 - Brightness scale: persisted user setting
 - Bloom strength: persisted user setting
 - Room light profiles: centralized exposure/intensity tuning per room index
+- Automatic device-tier default selection based on memory / CPU / platform class
 
 All settings are wired globally in runtime and affect all rooms.
 
@@ -69,3 +70,4 @@ Each room entry in `src/render/roomAssetRegistry.js` can now define:
 - Android-first: use `medium` default for device thermal stability.
 - Keep `high` quality for desktop/testing.
 - Use KTX2 textures and DRACO meshes to reduce memory and load time.
+- Runtime now auto-selects a starting quality tier using device profile heuristics; users can still override it in settings.
